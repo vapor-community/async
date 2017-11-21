@@ -28,9 +28,6 @@ extension FutureType {
     /// Callback for accepting the expectation and returning something else.
     public typealias ExpectationMapCallback<T> = (Expectation) throws -> T
 
-    /// Callback for accepting the expectation and returning a new future.
-    public typealias ExpectationThenCallback<T> = (Expectation) throws -> Future<T>
-
     /// Adds a handler to be asynchronously executed on
     /// completion of this future.
     ///
@@ -89,8 +86,10 @@ extension FutureType {
 
     /// Maps a future to a future of a different type.
     /// The result returned within should be a future.
-    public func then<T>(_ callback: @escaping ExpectationThenCallback<T>) -> Future<T> {
-        let promise = Promise(T.self)
+    public func then<T>(_ callback: @escaping (Expectation) throws -> T) -> Future<T.Expectation>
+        where T: FutureType
+    {
+        let promise = Promise(T.Expectation.self)
 
         self.do { expectation in
             do {

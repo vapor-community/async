@@ -40,7 +40,7 @@ extension Array where Element: FutureType {
     /// futures in the input array.
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/advanced-futures/#combining-multiple-futures)
-    public func orderedFlatten() -> Future<[Element.Expectation]> {
+    public func flatten() -> Future<[Element.Expectation]> {
         let promise = Promise<[Element.Expectation]>()
 
         var elements: [Element.Expectation] = []
@@ -55,8 +55,8 @@ extension Array where Element: FutureType {
                 } else {
                     promise.complete(elements)
                 }
-                }.catch { error in
-                    promise.fail(error)
+            }.catch { error in
+                promise.fail(error)
             }
         }
 
@@ -78,17 +78,10 @@ extension Array where Element: FutureType {
     }
 
     /// See FutureType.then
-    public func then<T>(_ callback: @escaping ([Element.Expectation]) throws -> Future<T>) -> Future<T> {
+    public func then<T>(_ callback: @escaping ([Element.Expectation]) throws -> T) -> Future<T.Expectation>
+        where T: FutureType
+    {
         return flatten().then(callback)
-    }
-
-    /// Flattens an array of futures into a future with an array of results.
-    /// note: the results will be in random order.
-    ///
-    /// [Learn More →](https://docs.vapor.codes/3.0/async/advanced-futures/#combining-multiple-futures)
-    public func flatten() -> Future<[Element.Expectation]> {
-        let many = ManyFutures(self)
-        return many.promise.future
     }
 }
 
@@ -112,55 +105,37 @@ extension Array where Element: FutureType, Element.Expectation == Void {
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/advanced-futures/#combining-multiple-futures)
     public func flatten() -> Future<Void> {
-        let many = ManyFutures(self)
-        let promise = Promise(Void.self)
-        many.promise.future.do { _ in
-            promise.complete()
-        }.catch(promise.fail)
-        return promise.future
+        return then { _ in
+            return Future.done
+        }
     }
 }
 
-/// Internal class for representing more than one future.
-internal final class ManyFutures<F: FutureType> {
-    /// The future's result will be stored
-    /// here when it is resolved.
-    var promise: Promise<[F.Expectation]>
+/// MARK: Variadic
 
-    /// The futures completed.
-    private var results: [F.Expectation]
-
-    /// Ther errors caught.
-    private var errors: [Swift.Error]
-
-    /// All the awaited futures
-    private var many: [F]
-
-    /// Create a new many future.
-    public init(_ many: [F]) {
-        self.many = many
-        self.results = []
-        self.errors = []
-        self.promise = Promise<[F.Expectation]>()
-
-        for future in many {
-            future.do { res in
-                self.results.append(res)
-                self.update()
-            }.catch { err in
-                self.errors.append(err)
-                self.update()
-            }
+/// Calls the supplied callback when both futures have completed.
+public func then<A, B, T>(
+    _ futureA: A, _ futureB: B, _ callback: @escaping (A.Expectation, B.Expectation) throws -> (T)
+) -> Future<T.Expectation>
+    where A: FutureType, B: FutureType, T: FutureType
+{
+    return futureA.then { a -> Future<T.Expectation> in
+        return futureB.then { b -> T in
+            return try callback(a, b)
         }
     }
+}
 
-    /// Updates the many futures
-    func update() {
-        if results.count + errors.count == many.count {
-            if errors.count == 0 {
-                promise.complete(results)
-            } else {
-                promise.fail(errors.first!) // FIXME: combine errors
+/// Calls the supplied callback when all three futures have completed.
+public func then<A, B, C, T>(
+    _ futureA: A, _ futureB: B, _ futureC: C, _ callback: @escaping (A.Expectation, B.Expectation, C.Expectation) throws -> (T)
+) -> Future<T.Expectation>
+where A: FutureType, B: FutureType, C: FutureType, T: FutureType
+{
+    return futureA.then { a -> Future<T.Expectation> in
+        return futureB.then { b -> Future<T.Expectation> in
+            return futureC.then { c -> T in
+                return try callback(a, b, c)
             }
         }
     }

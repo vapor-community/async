@@ -22,17 +22,17 @@
 ///
 /// [Learn More →](https://docs.vapor.codes/3.0/async/streams-introduction/#transforming-streams-without-an-intermediary-stream)
 public final class MapStream<In, Out>: Stream {
-    /// See `InputStream.Input`
+    /// See InputStream.Input
     public typealias Input = In
 
-    /// See `OutputStream.Output`
+    /// See OutputStream.Output
     public typealias Output = Out
 
-    /// See `OutputStream.outputStream`
-    public var outputStream: OutputHandler?
+    /// See OutputStream.outputStream
+    public var outputStream: OutputHandler
 
-    /// See `BaseStream.errorStream`
-    public var errorStream: ErrorHandler?
+    /// See BaseStream.errorStream
+    public var errorStream: ErrorHandler
 
     /// Maps input to output
     public typealias MapClosure = (In) throws -> (Out)
@@ -43,15 +43,13 @@ public final class MapStream<In, Out>: Stream {
     /// Create a new Map stream with the supplied closure.
     public init(map: @escaping MapClosure) {
         self.map = map
+        self.errorStream = ErrorClosure()
+        self.outputStream = OutputClosure()
     }
 
     /// See InputStream.inputStream
-    public func inputStream(_ input: In) {
-        do {
-            try output(map(input))
-        } catch {
-            errorStream?(error)
-        }
+    public func inputStream(_ input: In) throws {
+        try output(map(input))
     }
 }
 
@@ -68,10 +66,6 @@ extension OutputStream {
     /// [Learn More →](https://docs.vapor.codes/3.0/async/streams-introduction/#transforming-streams-without-an-intermediary-stream)
     public func map<T>(_ transform: @escaping ((Output) throws -> (T))) -> MapStream<Output, T> {
         let stream = MapStream(map: transform)
-        self.drain(into: stream)
-        self.errorStream = { error in
-            stream.errorStream?(error)
-        }
-        return stream
+        return self.stream(to: stream)
     }
 }

@@ -24,21 +24,19 @@ public final class EmitterStream<Out>: OutputStream {
     public typealias Output = Out
 
     /// See OutputStream.outputStream
-    public var outputStream: OutputHandler?
+    public var outputStream: OutputHandler
 
     /// See BaseStream.errorStream
-    public var errorStream: ErrorHandler?
+    public var errorStream: ErrorHandler
 
     /// Create a new emitter stream.
-    public init(_ type: Out.Type = Out.self) { }
+    public init(_ type: Out.Type = Out.self) {
+        self.errorStream = ErrorClosure()
+        self.outputStream = OutputClosure()
+    }
 
     /// Emits an output.
     public func emit(_ output: Output) {
         self.output(output)
-    }
-
-    /// Emits an error.
-    public func report(_ error: Error) {
-        errorStream?(error)
     }
 }

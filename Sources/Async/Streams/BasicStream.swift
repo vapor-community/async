@@ -7,10 +7,10 @@ public final class BasicStream<Data>: Stream, ClosableStream {
     public typealias Output = Data
 
     /// See Stream.errorStream
-    public var errorStream: ErrorHandler?
+    public var errorStream: ErrorHandler
 
     /// See OutputStream.outputStream
-    public var outputStream: OutputHandler?
+    public var outputStream: OutputHandler
 
     /// See ClosableStream.onClose
     public var onClose: CloseHandler?
@@ -21,5 +21,8 @@ public final class BasicStream<Data>: Stream, ClosableStream {
     }
 
     /// Create a new BasicStream generic on the supplied type.
-    public init(_ data: Data.Type = Data.self) {}
+    public init(_ data: Data.Type = Data.self) {
+        self.errorStream = ErrorClosure()
+        self.outputStream = OutputClosure()
+    }
 }

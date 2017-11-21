@@ -36,12 +36,12 @@ public final class OutputStreamSplitter<O: OutputStream> {
     public init(_ outputStream: O) {
         self.outputStream = outputStream
         splits = []
-        self.outputStream.outputStream = { output in
+        self.outputStream.outputStream = O.OutputHandler { output in
             for delta in self.splits {
                 do {
                     try delta(output)
                 } catch {
-                    outputStream.errorStream?(error)
+                    outputStream.report(error)
                 }
             }
         }

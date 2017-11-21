@@ -47,10 +47,37 @@ final class StreamTests : XCTestCase {
         XCTAssertEqual(output, [1, 1, 2, 2, 3, 3])
     }
 
+    func testErrorChaining() throws {
+        let numberEmitter = EmitterStream(Int.self)
+
+        var results: [Int] = []
+        var reported = false
+
+        numberEmitter.map { int in
+            return int * 2
+        }.map { int in
+            return int / 2
+        }.drain { square in
+            results.append(square)
+        }.catch { error in
+            reported = true
+            XCTAssert(error is CustomError)
+        }
+
+        numberEmitter.emit(1)
+        numberEmitter.emit(2)
+        numberEmitter.emit(3)
+
+        numberEmitter.report(CustomError())
+
+        XCTAssertEqual(results, [1, 2, 3])
+        XCTAssert(reported)
+    }
 
     static let allTests = [
         ("testPipeline", testPipeline),
         ("testDelta", testDelta),
+        ("testErrorChaining", testErrorChaining),
     ]
 }
 

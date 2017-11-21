@@ -6,23 +6,56 @@ public final class BasicStream<Data>: Stream, ClosableStream {
     /// See OutputStream.Output
     public typealias Output = Data
 
-    /// See Stream.errorStream
-    public var errorStream: ErrorHandler
+    /// A closure that takes an input.
+    public typealias OnInput = (Input) throws -> ()
 
-    /// See OutputStream.outputStream
-    public var outputStream: OutputHandler
+    /// Pass output as it is generated to this stream.
+    public var inputClosure: OnInput
 
-    /// See ClosableStream.onClose
-    public var onClose: CloseHandler?
+    /// A closure that takes an error.
+    public typealias OnError = (Error) -> ()
 
-    /// See InputStream.inputStream()
-    public func inputStream(_ input: Data) {
-        output(input)
+    /// Pass output as it is generated to this stream.
+    public var errorClosure: OnError
+
+    /// See CloseableStream.close
+    public var onClose: OnClose?
+
+    /// See InputStream.onInput
+    public func onInput(_ input: Data) {
+        do {
+            try self.inputClosure(input)
+        } catch {
+            self.onError(error)
+        }
+    }
+
+    /// See InputStream.onError
+    public func onError(_ error: Error) {
+        errorClosure(error)
+        self.close()
+    }
+
+    /// See OutputStream.onOutput
+    public func onOutput<I>(_ input: I) where I: InputStream, Data == I.Input {
+        inputClosure = input.onInput
+        errorClosure = input.onError
     }
 
     /// Create a new BasicStream generic on the supplied type.
-    public init(_ data: Data.Type = Data.self) {
-        self.errorStream = ErrorClosure()
-        self.outputStream = OutputClosure()
+    public init(
+        _ data: Data.Type = Data.self,
+        onInput: @escaping OnInput = { _ in },
+        onError: @escaping OnError = { _ in }
+    ) {
+        self.inputClosure = onInput
+        self.errorClosure = onError
+    }
+
+    @discardableResult
+    /// Sets this stream's error clsoure
+    public func `catch`(onError: @escaping OnError) -> Self {
+        self.errorClosure = onError
+        return self
     }
 }

@@ -7,17 +7,8 @@ public protocol InputStream: BaseStream {
     associatedtype Input
 
     /// Input will be passed here as it is received.
-    func inputStream(_ input: Input) throws
-}
+    func onInput(_ input: Input)
 
-extension InputStream {
-    /// Send input to stream, catching errors in
-    /// the error stream.
-    public func input(_ input: Input) {
-        do {
-            try inputStream(input)
-        } catch {
-            errorStream.closure(error)
-        }
-    }
+    /// Errors will be passed here as it is received.
+    func onError(_ error: Error)
 }

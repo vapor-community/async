@@ -23,20 +23,21 @@ public final class EmitterStream<Out>: OutputStream {
     /// See OutputStream.Output
     public typealias Output = Out
 
-    /// See OutputStream.outputStream
-    public var outputStream: OutputHandler
+    /// Internal stream
+    internal var _stream: BasicStream<Out>
 
-    /// See BaseStream.errorStream
-    public var errorStream: ErrorHandler
+    /// See OutputStream.onOutput
+    public func onOutput<I>(_ input: I) where I : InputStream, Out == I.Input {
+        _stream.onOutput(input)
+    }
 
     /// Create a new emitter stream.
     public init(_ type: Out.Type = Out.self) {
-        self.errorStream = ErrorClosure()
-        self.outputStream = OutputClosure()
+        _stream = .init()
     }
 
     /// Emits an output.
     public func emit(_ output: Output) {
-        self.output(output)
+        _stream.onInput(output)
     }
 }

@@ -6,36 +6,8 @@ public protocol OutputStream: BaseStream {
     /// For example: Request, ByteBuffer, Client
     associatedtype Output
 
-    /// Closures that can handle this stream's output.
-    typealias OutputHandler = OutputClosure<Output>
-
-    /// Pass output as it is generated to this stream.
-    var outputStream: OutputHandler { get set }
-}
-
-public final class OutputClosure<Output> {
-    /// A closure that takes one onput.
-    public typealias Closure = (Output) throws -> ()
-
-    /// Pass output as it is generated to this stream.
-    public var closure: Closure
-
-    /// Creates a new output closure.
-    public init(_ closure: @escaping Closure = { _ in }) {
-        self.closure = closure
-    }
-}
-
-extension OutputStream {
-    /// Send output to stream, catching errors in
-    /// the error stream.
-    public func output(_ output: Output) {
-        do {
-            try outputStream.closure(output)
-        } catch {
-            errorStream.closure(error)
-        }
-    }
+    /// Send output to the provided input stream.
+    func onOutput<I: InputStream>(_ input: I) where I.Input == Output
 }
 
 // MARK: Convenience
@@ -44,9 +16,10 @@ extension OutputStream {
     /// Drains the output stream into a closure.
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/streams-introduction/#draining-streams)
-    public func drain(_ handler: @escaping OutputHandler.Closure) -> Self {
-        self.outputStream.closure = handler
-        return self
+    public func drain(onInput: @escaping BasicStream<Output>.OnInput) -> BasicStream<Output> {
+        let input = BasicStream<Output>(onInput: onInput)
+        self.onOutput(input)
+        return input
     }
 
 
@@ -56,9 +29,8 @@ extension OutputStream {
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/streams-basics/#chaining-streams)
     @discardableResult
-    public func stream<S: Stream>(to stream: S) -> S where S.Input == Self.Output {
-        stream.errorStream = self.errorStream
-        self.outputStream.closure = stream.inputStream
+    public func stream<S: InputStream>(to stream: S) -> S where S.Input == Self.Output {
+        self.onOutput(stream)
         return stream
     }
 }

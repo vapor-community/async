@@ -28,11 +28,8 @@ public final class MapStream<In, Out>: Stream {
     /// See OutputStream.Output
     public typealias Output = Out
 
-    /// See OutputStream.outputStream
-    public var outputStream: OutputHandler
-
-    /// See BaseStream.errorStream
-    public var errorStream: ErrorHandler
+    /// Internal stream
+    internal var _stream: BasicStream<Out>
 
     /// Maps input to output
     public typealias MapClosure = (In) throws -> (Out)
@@ -40,16 +37,29 @@ public final class MapStream<In, Out>: Stream {
     /// The stored map closure
     public let map: MapClosure
 
+    /// See InputStream.onInput
+    public func onInput(_ input: In) {
+        do {
+            try _stream.onInput(map(input))
+        } catch {
+            onError(error)
+        }
+    }
+
+    /// See InputStream.onError
+    public func onError(_ error: Error) {
+        _stream.onError(error)
+    }
+
+    /// See OutputStream.onOutput
+    public func onOutput<I>(_ input: I) where I : InputStream, Out == I.Input {
+        _stream.onOutput(input)
+    }
+
     /// Create a new Map stream with the supplied closure.
     public init(map: @escaping MapClosure) {
         self.map = map
-        self.errorStream = ErrorClosure()
-        self.outputStream = OutputClosure()
-    }
-
-    /// See InputStream.inputStream
-    public func inputStream(_ input: In) throws {
-        try output(map(input))
+        _stream = .init()
     }
 }
 

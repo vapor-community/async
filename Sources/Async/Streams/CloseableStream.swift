@@ -12,12 +12,12 @@ public protocol ClosableStream: BaseStream {
 
 extension ClosableStream {
     /// Closes the stream, calling the `onClose` handler.
-    public func close() {
+    public func notifyClosed() {
         onClose?()
     }
 
     /// Sets a CloseHandler callback on this stream.
-    public func finally(_ onClose: @escaping OnClose) {
+    public func finally(onClose: @escaping OnClose) {
         self.onClose = onClose
     }
 }

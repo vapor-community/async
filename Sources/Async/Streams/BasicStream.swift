@@ -33,13 +33,17 @@ public final class BasicStream<Data>: Stream, ClosableStream {
     /// See InputStream.onError
     public func onError(_ error: Error) {
         errorClosure(error)
-        self.close()
     }
 
     /// See OutputStream.onOutput
     public func onOutput<I>(_ input: I) where I: InputStream, Data == I.Input {
         inputClosure = input.onInput
         errorClosure = input.onError
+    }
+
+    /// See CloseableStream.close
+    public func close() {
+        notifyClosed()
     }
 
     /// Create a new BasicStream generic on the supplied type.

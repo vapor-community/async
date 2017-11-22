@@ -39,13 +39,11 @@ public final class EmitterStream<Out>: OutputStream, ClosableStream {
 
     /// See ClosableStream.close
     public func close() {
-        print("emitter close")
         _stream.close()
     }
 
     /// See ClosableStream.onClose
     public func onClose(_ close: ClosableStream) {
-        print("emitter on close")
         _stream.onClose(close)
     }
 

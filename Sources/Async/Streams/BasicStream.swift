@@ -46,13 +46,11 @@ public final class BasicStream<Data>: Stream, ClosableStream {
 
     /// See CloseableStream.onClose(_:)
     public func onClose(_ onClose: ClosableStream) {
-        print("base on close")
         closeClosure = onClose.close
     }
 
     /// See CloseableStream.close
     public func close() {
-        print("base close")
         closeClosure()
     }
 

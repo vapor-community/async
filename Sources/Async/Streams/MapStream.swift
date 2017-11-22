@@ -58,13 +58,11 @@ public final class MapStream<In, Out>: Stream, ClosableStream {
 
     /// See CloseableStream.onClose
     public func onClose(_ onClose: ClosableStream) {
-        print("map on close")
         _stream.onClose(onClose)
     }
 
     /// See CloseableStream.close
     public func close() {
-        print("map close")
         _stream.close()
     }
 

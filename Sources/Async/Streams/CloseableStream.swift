@@ -1,23 +1,24 @@
 /// A Stream that can be closed and can be listened to for closing
+///
+/// This stream is unique in that it is both an:
+///     - input: subscribes to close events
+///     - output: publishes close events
+///
+/// note the subtle difference between the two `onClose` methods.
 public protocol ClosableStream: BaseStream {
-    /// A handler called when the stream closes.
-    typealias OnClose = () -> ()
-
-    /// Closes the connection
+    /// Closes the stream
     func close()
-
-    /// A function that gets called if the stream closes
-    var onClose: OnClose? { get set }
+    
+    /// Assign a new closeable stream to be notified
+    /// when this stream closes.
+    func onClose(_ onClose: ClosableStream)
 }
 
 extension ClosableStream {
-    /// Closes the stream, calling the `onClose` handler.
-    public func notifyClosed() {
-        onClose?()
-    }
-
     /// Sets a CloseHandler callback on this stream.
-    public func finally(onClose: @escaping OnClose) {
-        self.onClose = onClose
+    public func finally(onClose: @escaping BasicStream<Void>.OnClose) {
+        let stream = BasicStream<Void>()
+        stream.closeClosure = onClose
+        self.onClose(stream)
     }
 }

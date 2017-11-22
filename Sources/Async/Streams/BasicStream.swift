@@ -18,8 +18,11 @@ public final class BasicStream<Data>: Stream, ClosableStream {
     /// Pass output as it is generated to this stream.
     public var errorClosure: OnError
 
+    /// A closure for handling on close events
+    public typealias OnClose = () -> ()
+
     /// See CloseableStream.close
-    public var onClose: OnClose?
+    public var closeClosure: OnClose
 
     /// See InputStream.onInput
     public func onInput(_ input: Data) {
@@ -41,19 +44,28 @@ public final class BasicStream<Data>: Stream, ClosableStream {
         errorClosure = input.onError
     }
 
+    /// See CloseableStream.onClose(_:)
+    public func onClose(_ onClose: ClosableStream) {
+        print("base on close")
+        closeClosure = onClose.close
+    }
+
     /// See CloseableStream.close
     public func close() {
-        notifyClosed()
+        print("base close")
+        closeClosure()
     }
 
     /// Create a new BasicStream generic on the supplied type.
     public init(
         _ data: Data.Type = Data.self,
         onInput: @escaping OnInput = { _ in },
-        onError: @escaping OnError = { _ in }
+        onError: @escaping OnError = { _ in },
+        onClose: @escaping OnClose = { }
     ) {
         self.inputClosure = onInput
         self.errorClosure = onError
+        self.closeClosure = onClose
     }
 
     @discardableResult

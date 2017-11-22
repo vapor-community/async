@@ -77,9 +77,39 @@ final class StreamTests : XCTestCase {
         XCTAssert(reported)
     }
 
+    func testCloseChaining() throws {
+        let numberEmitter = EmitterStream(Int.self)
+
+        var results: [Int] = []
+        var closed = false
+
+        numberEmitter.map { int in
+            return int * 2
+        }.map { int in
+            return int / 2
+        }.drain { res in
+            results.append(res)
+        }.catch { error in
+            XCTFail()
+        }.finally {
+            closed = true
+        }
+
+        numberEmitter.emit(1)
+        numberEmitter.emit(2)
+        numberEmitter.emit(3)
+
+        numberEmitter.close()
+
+        XCTAssertEqual(results, [1, 2, 3])
+        XCTAssert(closed)
+    }
+
+
     static let allTests = [
         ("testPipeline", testPipeline),
         ("testDelta", testDelta),
         ("testErrorChaining", testErrorChaining),
+        ("testCloseChaining", testCloseChaining),
     ]
 }

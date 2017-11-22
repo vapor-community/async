@@ -19,6 +19,9 @@ extension OutputStream {
     public func drain(onInput: @escaping BasicStream<Output>.OnInput) -> BasicStream<Output> {
         let input = BasicStream<Output>(onInput: onInput)
         self.onOutput(input)
+        if let notifier = self as? ClosableStream {
+            notifier.onClose(input)
+        }
         return input
     }
 
@@ -29,8 +32,20 @@ extension OutputStream {
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/streams-basics/#chaining-streams)
     @discardableResult
-    public func stream<S: InputStream>(to stream: S) -> S where S.Input == Self.Output {
+    public func stream<S>(to stream: S) -> S where S: InputStream, S.Input == Self.Output {
         self.onOutput(stream)
+        if let notifier = self as? ClosableStream {
+            if let listener = stream as? ClosableStream {
+                notifier.onClose(listener)
+            } else {
+                /// FIXME: make all streams closable?
+                print("""
+                [⚠️ Dev Warning] Closable stream connected to non-closable stream.
+                \(Self.self) -> \(S.self).
+                On close events will not be propogated.
+                """)
+            }
+        }
         return stream
     }
 }

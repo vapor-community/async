@@ -21,7 +21,7 @@
 ///     print(squares) // [1, 4, 9]
 ///
 /// [Learn More →](https://docs.vapor.codes/3.0/async/streams-introduction/#transforming-streams-without-an-intermediary-stream)
-public final class MapStream<In, Out>: Stream {
+public final class MapStream<In, Out>: Stream, ClosableStream {
     /// See InputStream.Input
     public typealias Input = In
 
@@ -54,6 +54,18 @@ public final class MapStream<In, Out>: Stream {
     /// See OutputStream.onOutput
     public func onOutput<I>(_ input: I) where I : InputStream, Out == I.Input {
         _stream.onOutput(input)
+    }
+
+    /// See CloseableStream.onClose
+    public func onClose(_ onClose: ClosableStream) {
+        print("map on close")
+        _stream.onClose(onClose)
+    }
+
+    /// See CloseableStream.close
+    public func close() {
+        print("map close")
+        _stream.close()
     }
 
     /// Create a new Map stream with the supplied closure.

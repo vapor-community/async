@@ -83,6 +83,15 @@ extension FutureType {
 
         return promise.future
     }
+    
+    /// Maps the current future to contain the new type. Errors are carried over, successful (expected) results are transformed into the given instance.
+    ///
+    /// [Learn More →](https://docs.vapor.codes/3.0/async/promise-future-introduction/#mapping-results)
+    public func transform<T>(_ instance: T) -> Future<T> {
+        return self.map { _ in
+            instance
+        }
+    }
 
     /// Maps a future to a future of a different type.
     /// The result returned within should be a future.

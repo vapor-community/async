@@ -9,13 +9,13 @@ public protocol ClosableStream: BaseStream {
     /// Closes the stream
     func close()
     
-    /// Assign a new closeable stream to be notified
+    /// Assign a closeable stream to be notified (closed)
     /// when this stream closes.
     func onClose(_ onClose: ClosableStream)
 }
 
 extension ClosableStream {
-    /// Sets a CloseHandler callback on this stream.
+    /// The supplied closure will be called when this stream closes.
     public func finally(onClose: @escaping BasicStream<Void>.OnClose) {
         let stream = BasicStream<Void>()
         stream.closeClosure = onClose

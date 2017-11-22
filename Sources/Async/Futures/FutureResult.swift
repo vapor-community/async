@@ -2,39 +2,50 @@ import Foundation
 import Dispatch
 
 // Indirect so futures can be nested
-public indirect enum FutureResult<Expectation> {
-    case error(Error)
-    case expectation(Expectation)
+public final class FutureResult<Expectation> {
+    let _error: Error!
+    let _expectation: Expectation!
+    
+    var isError: Bool
 
     /// Returns the result error or
     /// nil if the result contains expectation.
     public var error: Error? {
-        switch self {
-        case .error(let error):
-            return error
-        default:
-            return nil
+        if isError {
+            return _error
         }
+        
+        return nil
     }
 
     /// Returns the result expectation or
     /// nil if the result contains an error.
     public var expectation: Expectation? {
-        switch self {
-        case .expectation(let expectation):
-            return expectation
-        default:
-            return nil
+        if !isError {
+            return _expectation
         }
+        
+        return nil
     }
     
     /// Throws an error if this contains an error, returns the Expectation otherwise
     public func unwrap() throws -> Expectation {
-        switch self {
-        case .expectation(let data):
-            return data
-        case .error(let error):
-            throw error
+        if isError {
+            throw _error
         }
+        
+        return _expectation
+    }
+    
+    public init(error: Error) {
+        self._error = error
+        self._expectation = nil
+        self.isError = true
+    }
+    
+    public init(expectation: Expectation) {
+        self._error = nil
+        self._expectation = expectation
+        self.isError = false
     }
 }

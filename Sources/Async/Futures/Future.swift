@@ -38,7 +38,7 @@ public final class Future<T>: FutureType {
     /// [Learn More →](https://docs.vapor.codes/3.0/async/promise-future-introduction/#futures-without-promise)
     public convenience init(_ result: T) {
         self.init()
-        self.result = .expectation(result)
+        self.result = .init(expectation: result)
     }
 
     /// Pre-filled failed promise
@@ -46,7 +46,7 @@ public final class Future<T>: FutureType {
     /// [Learn More →](https://docs.vapor.codes/3.0/async/promise-future-introduction/#futures-without-promise)
     public convenience init(error: Error) {
         self.init()
-        self.result = .error(error)
+        self.result = .init(error: error)
     }
     
     /// `true` if the future is already completed.

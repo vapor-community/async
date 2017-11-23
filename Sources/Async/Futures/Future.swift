@@ -61,9 +61,11 @@ public final class Future<T>: FutureType {
         }
         self.result = result
 
-        for awaiter in self.awaiters {
+        for awaiter in awaiters {
             awaiter.callback(result)
         }
+        // release the awaiters to prevent retain cycles
+        awaiters = []
     }
 
     /// Locked method for adding an awaiter

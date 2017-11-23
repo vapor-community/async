@@ -150,6 +150,8 @@ extension FutureType {
     }
 }
 
+// MARK: Convenience
+
 /// Globally available `then` for mimicking behavior of calling `return future.then`
 /// where no starting future is available.
 ///
@@ -166,3 +168,21 @@ public func then<T>(_ callback: @escaping () throws -> Future<T>) -> Future<T> {
 
     return promise.future
 }
+
+// MARK: Void
+
+extension Future where T == Void {
+    /// Pre-completed void future.
+    public static var done: Future<Void> {
+        return _done
+    }
+}
+
+private let _done = Future(())
+
+extension FutureType where Expectation == Self {
+    public func addAwaiter(callback: @escaping ((FutureResult<Self>) -> ())) {
+        callback(.init(expectation: self))
+    }
+}
+

@@ -29,6 +29,9 @@ public final class OutputStreamSplitter<O: OutputStream> {
     /// to the error stream
     public typealias Splits = (O.Output) throws -> ()
 
+    /// Internal stream
+    internal var _stream: BasicStream<O.Output>?
+
     /// The stored stream deltas
     public var splits: [Splits]
 
@@ -36,19 +39,24 @@ public final class OutputStreamSplitter<O: OutputStream> {
     public init(_ outputStream: O) {
         self.outputStream = outputStream
         splits = []
-        self.outputStream.outputStream = { output in
+        _stream = outputStream.drain { output in
             for delta in self.splits {
-                do {
-                    try delta(output)
-                } catch {
-                    outputStream.errorStream?(error)
-                }
+                try delta(output)
             }
         }
     }
 
     /// Split the output stream to this new handler.
-    public func split(closure: @escaping Splits) {
+    public func split(closure: @escaping Splits) -> Self {
         self.splits.append(closure)
+        return self
+    }
+
+
+    /// Sets this stream's error clsoure
+    @discardableResult
+    public func `catch`(onError: @escaping BasicStream<O.Output>.OnError) -> Self {
+        _stream?.catch(onError: onError)
+        return self
     }
 }

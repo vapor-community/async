@@ -19,26 +19,36 @@
 ///
 ///     print(squares) // [1, 4, 9]
 ///
-public final class EmitterStream<Out>: OutputStream {
+public final class EmitterStream<Out>: OutputStream, ClosableStream {
     /// See OutputStream.Output
     public typealias Output = Out
 
-    /// See OutputStream.outputStream
-    public var outputStream: OutputHandler?
-
-    /// See BaseStream.errorStream
-    public var errorStream: ErrorHandler?
+    /// Internal stream
+    internal var _stream: BasicStream<Out>
 
     /// Create a new emitter stream.
-    public init(_ type: Out.Type = Out.self) { }
+    public init(_ type: Out.Type = Out.self) {
+        _stream = .init()
+    }
+
+
+    /// See OutputStream.onOutput
+    public func onOutput<I>(_ input: I) where I : InputStream, Out == I.Input {
+        _stream.onOutput(input)
+    }
+
+    /// See ClosableStream.close
+    public func close() {
+        _stream.close()
+    }
+
+    /// See ClosableStream.onClose
+    public func onClose(_ close: ClosableStream) {
+        _stream.onClose(close)
+    }
 
     /// Emits an output.
     public func emit(_ output: Output) {
-        self.output(output)
-    }
-
-    /// Emits an error.
-    public func report(_ error: Error) {
-        errorStream?(error)
+        _stream.onInput(output)
     }
 }

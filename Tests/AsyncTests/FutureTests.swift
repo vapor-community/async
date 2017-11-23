@@ -197,15 +197,6 @@ final class FutureTests : XCTestCase {
         XCTAssertThrowsError(try integer.blockingAwait())
     }
     
-    func testFlatten() throws {
-        let future = Future("TEST example")
-        
-        let promise = Promise<String>()
-        promise.flatten(future)
-        
-        XCTAssertEqual(try promise.future.blockingAwait(), "TEST example")
-    }
-    
     func testPrecompleted() throws {
         let future = Future("Hello world")
         XCTAssertEqual(try future.blockingAwait(), "Hello world")

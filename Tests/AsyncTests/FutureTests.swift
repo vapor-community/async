@@ -164,6 +164,19 @@ final class FutureTests : XCTestCase {
         XCTAssertThrowsError(try integer.blockingAwait())
     }
     
+    func testSimpleMap() throws {
+        let future = Future<Void>(())
+        XCTAssertEqual(try future.transform(3).blockingAwait(), 3)
+    }
+    
+    func testCoalescing() throws {
+        let future = Future<Int?>(nil)
+        XCTAssertEqual(try (future ?? 4).blockingAwait(), 4)
+        
+        let future2 = Future<Int?>(5)
+        XCTAssertEqual(try (future2 ?? 4).blockingAwait(), 5)
+    }
+    
     func testFutureFlatMapErrors2() throws {
         let string = Promise<String>()
         let bool = Promise<Bool>()

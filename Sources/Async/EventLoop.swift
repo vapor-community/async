@@ -23,6 +23,8 @@ extension EventLoop {
     public static var `default`: EventLoop { return _default }
 }
 
+#if os(macOS)
+
 extension EventLoop {
     /// Returns the name of the current event loop.
     /// Useful for debugging.
@@ -31,3 +33,5 @@ extension EventLoop {
         return String(cString: name, encoding: .utf8)!
     }
 }
+
+#endif

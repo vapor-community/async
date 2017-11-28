@@ -52,6 +52,11 @@ public final class BasicStream<Data>: Stream, ClosableStream {
     /// See CloseableStream.close
     public func close() {
         closeClosure()
+        
+        // Unset all closures, releasing captured contexts
+        self.inputClosure = { _ in }
+        self.errorClosure = { _ in }
+        self.closeClosure = { }
     }
 
     /// Create a new BasicStream generic on the supplied type.

@@ -46,24 +46,14 @@ extension Array where Element: FutureType {
         var elements: [Element.Expectation] = []
         elements.reserveCapacity(self.count)
 
-        var iterator = makeIterator()
-        func handle(_ future: Element) {
-            future.do { res in
-                elements.append(res)
-                if let next = iterator.next() {
-                    handle(next)
-                } else {
+        for element in self {
+            element.do { result in
+                elements.append(result)
+                
+                if elements.count == self.count {
                     promise.complete(elements)
                 }
-            }.catch { error in
-                promise.fail(error)
-            }
-        }
-
-        if let first = iterator.next() {
-            handle(first)
-        } else {
-            promise.complete(elements)
+            }.catch(promise.fail)
         }
 
         return promise.future

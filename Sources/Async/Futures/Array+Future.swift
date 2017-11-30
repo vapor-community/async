@@ -12,7 +12,7 @@ extension Array where Element == LazyFuture<Void> {
         let promise = Promise<Void>()
 
         var iterator = makeIterator()
-        func handle(_ future: Element) {
+        func handle(_ future: LazyFuture<Void>) {
             future().do { res in
                 if let next = iterator.next() {
                     handle(next)
@@ -41,9 +41,13 @@ extension Array where Element: FutureType {
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/advanced-futures/#combining-multiple-futures)
     public func flatten() -> Future<[Element.Expectation]> {
-        let promise = Promise<[Element.Expectation]>()
-
         var elements: [Element.Expectation] = []
+
+        guard count > 0 else {
+            return Future(elements)
+        }
+
+        let promise = Promise<[Element.Expectation]>()
         elements.reserveCapacity(self.count)
 
         for element in self {

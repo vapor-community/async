@@ -1,30 +1,26 @@
 import Dispatch
 
 /// An event loop with context.
-public final class EventLoop: Extendable {
+public protocol EventLoop {
     /// This worker's event loop
-    public let queue: DispatchQueue
+    var queue: DispatchQueue { get }
+}
 
-    /// Allows the worker to be extended
-    public var extend: Extend
-
-    /// Create a new worker.
-    public init(queue: DispatchQueue) {
-        self.queue = queue
-        self.extend = Extend()
+extension DispatchQueue: EventLoop {
+    /// See EventLoop.queue
+    public var queue: DispatchQueue {
+        return self
     }
 }
 
 // MARK: Default
-private let _default = EventLoop(queue: .global())
 
 extension EventLoop {
     /// The default event loop
-    public static var `default`: EventLoop { return _default }
+    public static var `default`: EventLoop { return DispatchQueue.global() }
 }
 
 #if os(macOS)
-
 extension EventLoop {
     /// Returns the name of the current event loop.
     /// Useful for debugging.
@@ -33,5 +29,4 @@ extension EventLoop {
         return String(cString: name, encoding: .utf8)!
     }
 }
-
 #endif

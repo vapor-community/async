@@ -191,7 +191,7 @@ private let _done = Future(())
 
 extension FutureType where Expectation == Self {
     public func addAwaiter(callback: @escaping ((FutureResult<Self>) -> ())) {
-        callback(.expectation(self))
+        callback(.init(expectation: self))
     }
 }
 

@@ -18,7 +18,7 @@ public final class Promise<T> {
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/promise-future-introduction/#creating-a-promise)
     public func fail(_ error: Error) {
-        future.complete(with: .error(error))
+        future.complete(with: .init(error: error))
     }
 
     /// Fulfills the promise.
@@ -27,7 +27,7 @@ public final class Promise<T> {
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/promise-future-introduction/#creating-a-promise)
     public func complete(_ expectation: T) {
-        future.complete(with: .expectation(expectation))
+        future.complete(with: .init(expectation: expectation))
     }
 }
 

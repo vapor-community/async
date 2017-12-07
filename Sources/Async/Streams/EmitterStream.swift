@@ -19,36 +19,60 @@
 ///
 ///     print(squares) // [1, 4, 9]
 ///
-public final class EmitterStream<Out>: OutputStream, ClosableStream {
+public final class EmitterStream<Emitted>: OutputStream {
     /// See OutputStream.Output
-    public typealias Output = Out
+    public typealias Output = Emitted
 
-    /// Internal stream
-    internal var _stream: BasicStream<Out>
+    /// The requests that will receive emitted values
+    private var outputs: [EmitterOutputRequest<Emitted>]
 
-    /// Create a new emitter stream.
-    public init(_ type: Out.Type = Out.self) {
-        _stream = .init()
+    public init(_ emitted: Emitted.Type = Emitted.self) {
+        self.outputs = []
     }
 
-
-    /// See OutputStream.onOutput
-    public func onOutput<I>(_ input: I) where I : InputStream, Out == I.Input {
-        _stream.onOutput(input)
+    /// See OutputStream.output
+    public func output<S>(to inputStream: S) where S : InputStream, Emitted == S.Input {
+        let request = EmitterOutputRequest<Emitted>(inputStream)
+        outputs.append(request)
     }
 
-    /// See ClosableStream.close
+    /// Emits an item to the stream
+    public func emit(_ emitted: Emitted) {
+        outputs = outputs.filter { !$0.isCancelled }
+        for output in outputs {
+            if output.remaining > 0 {
+                output.stream.onInput(emitted)
+                output.remaining -= 1
+            }
+        }
+    }
+
+    /// Closes the emitter stream
     public func close() {
-        _stream.close()
+        for output in outputs {
+            output.stream.onClose()
+        }
     }
+}
 
-    /// See ClosableStream.onClose
-    public func onClose(_ close: ClosableStream) {
-        _stream.onClose(close)
-    }
+fileprivate final class EmitterOutputRequest<Emitted> {
+    /// Connected stream
+    var stream: BasicStream<Emitted>
 
-    /// Emits an output.
-    public func emit(_ output: Output) {
-        _stream.onInput(output)
+    /// Remaining requested output
+    var remaining: UInt
+
+    /// If true, the output request is cancelled
+    var isCancelled: Bool
+
+    /// Create a new emitter output request
+    init<S>(_ inputStream: S) where S: InputStream, Emitted == S.Input {
+        remaining = 0
+        isCancelled = false
+        let basic = BasicStream(Emitted.self)
+        stream = basic
+        basic.onRequestClosure = { self.remaining += $0 }
+        basic.onCancelClosure = { self.isCancelled = true }
+        basic.output(to: inputStream)
     }
 }

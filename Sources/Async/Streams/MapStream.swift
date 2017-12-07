@@ -21,15 +21,12 @@
 ///     print(squares) // [1, 4, 9]
 ///
 /// [Learn More →](https://docs.vapor.codes/3.0/async/streams-introduction/#transforming-streams-without-an-intermediary-stream)
-public final class MapStream<In, Out>: Stream, ClosableStream {
+public final class MapStream<In, Out>: Stream {
     /// See InputStream.Input
     public typealias Input = In
 
     /// See OutputStream.Output
     public typealias Output = Out
-
-    /// Internal stream
-    internal var _stream: BasicStream<Out>
 
     /// Maps input to output
     public typealias MapClosure = (In) throws -> (Out)
@@ -37,10 +34,38 @@ public final class MapStream<In, Out>: Stream, ClosableStream {
     /// The stored map closure
     public let map: MapClosure
 
+    /// Internal stream
+    internal var connected: BasicStream<Out>
+
+    /// Current output request
+    private var outputRequest: OutputRequest?
+
+    /// Initial output request size
+    private let initialOutputRequest: UInt
+
+    /// Create a new Map stream with the supplied closure.
+    public init(
+        map: @escaping MapClosure,
+        initialOutputRequest: UInt
+    ) {
+        self.map = map
+        self.initialOutputRequest =  initialOutputRequest
+        connected = .init()
+    }
+
+    /// See InputStream.onOutput
+    public func onOutput(_ outputRequest: OutputRequest) {
+        self.outputRequest = outputRequest
+        outputRequest.requestOutput(initialOutputRequest)
+    }
+
     /// See InputStream.onInput
     public func onInput(_ input: In) {
         do {
-            try _stream.onInput(map(input))
+            let output = try map(input)
+            print(connected)
+            connected.onInput(output)
+            outputRequest?.requestOutput()
         } catch {
             onError(error)
         }
@@ -48,28 +73,17 @@ public final class MapStream<In, Out>: Stream, ClosableStream {
 
     /// See InputStream.onError
     public func onError(_ error: Error) {
-        _stream.onError(error)
+        connected.onError(error)
     }
 
-    /// See OutputStream.onOutput
-    public func onOutput<I>(_ input: I) where I : InputStream, Out == I.Input {
-        _stream.onOutput(input)
+    /// See InputStream.onClose
+    public func onClose() {
+        connected.onClose()
     }
 
-    /// See CloseableStream.onClose
-    public func onClose(_ onClose: ClosableStream) {
-        _stream.onClose(onClose)
-    }
-
-    /// See CloseableStream.close
-    public func close() {
-        _stream.close()
-    }
-
-    /// Create a new Map stream with the supplied closure.
-    public init(map: @escaping MapClosure) {
-        self.map = map
-        _stream = .init()
+    /// See OutputStream.output
+    public func output<S>(to inputStream: S) where S : InputStream, Out == S.Input {
+        connected.output(to: inputStream)
     }
 }
 
@@ -84,8 +98,11 @@ extension OutputStream {
     ///     }
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/streams-introduction/#transforming-streams-without-an-intermediary-stream)
-    public func map<T>(_ transform: @escaping ((Output) throws -> (T))) -> MapStream<Output, T> {
-        let stream = MapStream(map: transform)
-        return self.stream(to: stream)
+    public func map<T>(
+        _ initialOutputRequest: UInt = 1,
+        map: @escaping MapStream<Output, T>.MapClosure
+    ) -> MapStream<Output, T> {
+        let map = MapStream(map: map, initialOutputRequest: initialOutputRequest)
+        return stream(to: map)
     }
 }

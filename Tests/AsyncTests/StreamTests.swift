@@ -3,43 +3,53 @@ import Async
 
 final class StreamTests : XCTestCase {
     func testPipeline() throws {
-        let numberEmitter = EmitterStream(Int.self)
-
         var squares: [Int] = []
         var reported = false
+        var closed = false
 
-        numberEmitter.map { int in
-            return int * int
-        }.drain { square in
-            squares.append(square)
-            if square == 9 {
+        let numberEmitter = EmitterStream(Int.self)
+
+        numberEmitter.map { num -> Int in
+            return num * num
+        }.drain(1) { num, req in
+            squares.append(num)
+            req.requestOutput()
+            if num == 9 {
                 throw CustomError()
             }
         }.catch { error in
             reported = true
             XCTAssert(error is CustomError)
+        }.finally {
+            closed = true
         }
 
         numberEmitter.emit(1)
         numberEmitter.emit(2)
         numberEmitter.emit(3)
 
+        numberEmitter.close()
+
         XCTAssertEqual(squares, [1, 4, 9])
         XCTAssert(reported)
+        XCTAssert(closed)
     }
 
     func testDelta() throws {
         let numberEmitter = EmitterStream<Int>()
-        let splitter = OutputStreamSplitter(numberEmitter)
 
         var output: [Int] = []
 
-        splitter.split { int in
+        numberEmitter.split { int, req in
             output.append(int)
-        }.split { int in
+            req.requestOutput()
+        }.drain { int, req in
             output.append(int)
+            req.requestOutput()
         }.catch { err in
             XCTFail("\(err)")
+        }.finally {
+            // closed
         }
 
         numberEmitter.emit(1)
@@ -59,14 +69,17 @@ final class StreamTests : XCTestCase {
             return int * 2
         }.map { int in
             return int / 2
-        }.drain { res in
+        }.drain { res, req in
             if res == 3 {
                 throw CustomError()
             }
             results.append(res)
+            req.requestOutput()
         }.catch { error in
             reported = true
             XCTAssert(error is CustomError)
+        }.finally {
+            // closed
         }
 
         numberEmitter.emit(1)
@@ -87,8 +100,9 @@ final class StreamTests : XCTestCase {
             return int * 2
         }.map { int in
             return int / 2
-        }.drain { res in
+        }.drain { res, req in
             results.append(res)
+            req.requestOutput()
         }.catch { error in
             XCTFail()
         }.finally {

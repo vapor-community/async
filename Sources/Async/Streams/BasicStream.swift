@@ -1,80 +1,100 @@
 /// A basic, generic stream implementation.
-public final class BasicStream<Data>: Stream, ClosableStream {
+public final class BasicStream<Data>: Stream, OutputRequest {
     /// See InputStream.Input
     public typealias Input = Data
 
     /// See OutputStream.Output
     public typealias Output = Data
 
-    /// A closure that takes an input.
-    public typealias OnInput = (Input) throws -> ()
+    /// Handles input
+    public typealias OnInput = (Input) -> ()
 
-    /// Pass output as it is generated to this stream.
-    public var inputClosure: OnInput
-
-    /// A closure that takes an error.
+    /// Handles errors
     public typealias OnError = (Error) -> ()
 
-    /// Pass output as it is generated to this stream.
-    public var errorClosure: OnError
-
-    /// A closure for handling on close events
+    /// Handles close
     public typealias OnClose = () -> ()
 
-    /// See CloseableStream.close
-    public var closeClosure: OnClose
+    /// Handles output
+    public typealias OnOutput = (OutputRequest) -> ()
 
-    /// See InputStream.onInput
-    public func onInput(_ input: Data) {
-        do {
-            try self.inputClosure(input)
-        } catch {
-            self.onError(error)
-        }
-    }
+    /// Handles output request
+    public typealias OnRequest = (UInt) -> ()
 
-    /// See InputStream.onError
-    public func onError(_ error: Error) {
-        errorClosure(error)
-    }
+    /// Handles cancellation
+    public typealias OnCancel = () -> ()
 
-    /// See OutputStream.onOutput
-    public func onOutput<I>(_ input: I) where I: InputStream, Data == I.Input {
-        inputClosure = input.onInput
-        errorClosure = input.onError
-    }
+    /// See OnInput
+    public var onInputClosure: OnInput
 
-    /// See CloseableStream.onClose(_:)
-    public func onClose(_ onClose: ClosableStream) {
-        closeClosure = onClose.close
-    }
+    /// See OnError
+    public var onErrorClosure: OnError
 
-    /// See CloseableStream.close
-    public func close() {
-        closeClosure()
-        
-        // Unset all closures, releasing captured contexts
-        self.inputClosure = { _ in }
-        self.errorClosure = { _ in }
-        self.closeClosure = { }
-    }
+    /// See OnClose
+    public var onCloseClosure: OnClose
+
+    /// See OnOutput
+    public var onOutputClosure: OnOutput
+
+    /// See OnRequest
+    public var onRequestClosure: OnRequest
+
+    /// See OnCancel
+    public var onCancelClosure: OnCancel
 
     /// Create a new BasicStream generic on the supplied type.
     public init(
         _ data: Data.Type = Data.self,
         onInput: @escaping OnInput = { _ in },
         onError: @escaping OnError = { _ in },
-        onClose: @escaping OnClose = { }
+        onClose: @escaping OnClose = { },
+        onOutput: @escaping OnOutput = { _ in },
+        onRequest: @escaping OnRequest = { _ in },
+        onCancel: @escaping OnCancel = { }
     ) {
-        self.inputClosure = onInput
-        self.errorClosure = onError
-        self.closeClosure = onClose
+        onInputClosure = onInput
+        onErrorClosure = onError
+        onCloseClosure = onClose
+        onOutputClosure = onOutput
+        onRequestClosure = onRequest
+        onCancelClosure = onCancel
     }
 
-    @discardableResult
-    /// Sets this stream's error clsoure
-    public func `catch`(onError: @escaping OnError) -> Self {
-        self.errorClosure = onError
-        return self
+    /// See InputStream.onInput
+    public func onInput(_ input: Data) {
+        onInputClosure(input)
+    }
+
+    /// See InputStream.onError
+    public func onError(_ error: Error) {
+        onErrorClosure(error)
+    }
+
+    /// See InputStream.onClose
+    public func onClose() {
+        onCloseClosure()
+    }
+
+    /// See InputStream.onOutput
+    public func onOutput(_ outputRequest: OutputRequest) {
+        onOutputClosure(outputRequest)
+    }
+
+    /// See OutputStream.output
+    public func output<S>(to inputStream: S) where S : InputStream, Data == S.Input {
+        onInputClosure = inputStream.onInput
+        onErrorClosure = inputStream.onError
+        onCloseClosure = inputStream.onClose
+        inputStream.onOutput(self)
+    }
+
+    /// See OutputRequest.onRequest
+    public func requestOutput(_ count: UInt) {
+        onRequestClosure(count)
+    }
+
+    /// See OutputRequest.onCancel
+    public func cancelOutput() {
+        onCancelClosure()
     }
 }

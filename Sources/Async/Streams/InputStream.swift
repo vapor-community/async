@@ -11,7 +11,7 @@
 ///
 /// Demand can be signaled via `OutputRequest.requestOutput` whenever the `InputStream`
 /// instance is capable of handling more.
-public protocol InputStream {
+public protocol InputStream: class {
     /// The type of element signaled.
     associatedtype Input
 

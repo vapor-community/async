@@ -3,7 +3,7 @@
 /// It can only be used once by a single `InputStream`.
 ///
 /// It is used to both signal desire for data and cancel demand (and allow resource cleanup).
-public protocol OutputRequest {
+public protocol OutputRequest: class {
     /// No events will be sent by a `OutputStream` until demand is signaled via this method.
     ///
     /// It can be called however often and whenever needed—but the outstanding cumulative demand

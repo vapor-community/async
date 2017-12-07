@@ -6,7 +6,7 @@
 ///
 /// When serving multiple `InputStream`s, the `OutputStream` can support
 /// either unicast or multicast streaming.
-public protocol OutputStream {
+public protocol OutputStream: class {
     /// The type of element signaled.
     associatedtype Output
 

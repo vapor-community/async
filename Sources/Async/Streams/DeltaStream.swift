@@ -31,7 +31,7 @@ public final class DeltaStream<Splitting>: Stream {
     /// Handles input
     public typealias OnInput = (Input, OutputRequest) throws -> ()
 
-    /// See OnDrainingInput
+    /// See OnInput
     private let onInputClosure: OnInput
 
     /// Current output request

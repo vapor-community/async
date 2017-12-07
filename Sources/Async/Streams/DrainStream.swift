@@ -1,6 +1,8 @@
 /// Drains signals into the supplied closures.
-/// note: This stream will _not_ forward signals for
-/// which it has draining closures set to connected streams.
+///
+/// This stream will _not_ forward signals to connected streams
+/// for which it has draining closures set.
+///
 /// Signals for which no closures are set will continue to be forwarded.
 public final class DrainStream<Draining>: Stream {
     /// See OutputStream.Output
@@ -22,7 +24,7 @@ public final class DrainStream<Draining>: Stream {
     /// Handles close
     public typealias OnClose = () -> ()
 
-    /// See OnDrainingInput
+    /// See OnInput
     private let onInputClosure: OnInput?
 
     /// See OnError
@@ -109,7 +111,7 @@ extension OutputStream {
         return stream(to: drain)
     }
 
-    /// Drains the output stream into a closure.
+    /// Drains the error stream into a closure.
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/streams-introduction/#draining-streams)
     public func `catch`(onError: @escaping DrainStream<Output>.OnError) -> DrainStream<Output> {
@@ -117,12 +119,11 @@ extension OutputStream {
         return stream(to: drain)
     }
 
-    /// The supplied closure will be called when this stream closes.
+    /// Drains the close stream into a closure.
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/streams-introduction/#draining-streams)
-    @discardableResult
-    public func finally(onClose: @escaping BasicStream<Void>.OnClose) -> DrainStream<Output> {
+    public func finally(onClose: @escaping BasicStream<Void>.OnClose) {
         let drain = DrainStream(Output.self, onClose: onClose, initialOutputRequest: 0)
-        return stream(to: drain)
+        output(to: drain)
     }
 }

@@ -24,7 +24,7 @@ public protocol InputStream {
     ///
     /// The `OutputStream` will send notifications only in response to `OutputRequest.requestOutput`.
     ///
-    /// - parameter subscription: `OutputRequest` that allows requesting data via `OutputRequest.requestOutput`
+    /// - parameter outputRequest: `OutputRequest` that allows requesting data via `OutputRequest.requestOutput`
     func onOutput(_ outputRequest: OutputRequest)
 
     /// Data notification sent by the `OutputStream` in response to requests to `OutputRequest.requestOutput`.
@@ -36,7 +36,7 @@ public protocol InputStream {
     ///
     /// No further events will be sent even if `OutputRequest.requestOutput` is invoked again.
     ///
-    /// - parameter error: the throwable signaled
+    /// - parameter error: the error signaled
     func onError(_ error: Error)
 
     /// Successful terminal state.

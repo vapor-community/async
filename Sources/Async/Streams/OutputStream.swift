@@ -1,8 +1,11 @@
 /// A `OutputStream` is a provider of a potentially unbounded number of sequenced elements,
 /// publishing them according to the demand received from its Subscriber(s).
 ///
-/// A `OutputStream` can serve multiple Subscribers subscribed dynamically
-/// at various points in time.
+/// A `OutputStream` can serve multiple `InputStream` subscribed dynamically
+/// at various points in time. It may also choose to only serve oneat a time.
+///
+/// When serving multiple `InputStream`s, the `OutputStream` can support
+/// either unicast or multicast streaming.
 public protocol OutputStream {
     /// The type of element signaled.
     associatedtype Output
@@ -26,7 +29,7 @@ public protocol OutputStream {
 extension OutputStream {
     /// Drains the output stream into another input/output stream which can be chained.
     ///
-    /// Also chains the errors to the other input/output stream
+    /// Also chains the errors and close events to the connected input/output stream
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/streams-basics/#chaining-streams)
     public func stream<S>(to stream: S) -> S where S: InputStream, S.Input == Self.Output {

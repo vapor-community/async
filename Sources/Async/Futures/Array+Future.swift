@@ -8,9 +8,9 @@ extension Array where Element == LazyFuture<Void> {
     /// complete before starting.
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/advanced-futures/#combining-multiple-futures)
-    public func syncFlatten() -> Future<Void> {
+    public func syncFlatten() -> Completable {
         let promise = Promise<Void>()
-
+        
         var iterator = makeIterator()
         func handle(_ future: LazyFuture<Void>) {
             future().do { res in
@@ -23,18 +23,18 @@ extension Array where Element == LazyFuture<Void> {
                 promise.fail(error)
             }
         }
-
+        
         if let first = iterator.next() {
             handle(first)
         } else {
             promise.complete()
         }
-
+        
         return promise.future
     }
 }
 
-extension Array where Element: FutureType {
+extension Array where Element : FutureType {
     /// Flattens an array of futures into a future with an array of results.
     /// note: the order of the results will match the order of the
     /// futures in the input array.
@@ -51,13 +51,17 @@ extension Array where Element: FutureType {
         elements.reserveCapacity(self.count)
 
         for element in self {
-            element.do { result in
-                elements.append(result)
-                
-                if elements.count == self.count {
-                    promise.complete(elements)
+            element.addAwaiter { result in
+                switch result {
+                case .error(let error): promise.fail(error)
+                case .expectation(let expectation):
+                    elements.append(expectation)
+                    
+                    if elements.count == self.count {
+                        promise.complete(elements)
+                    }
                 }
-            }.catch(promise.fail)
+            }
         }
 
         return promise.future
@@ -66,69 +70,74 @@ extension Array where Element: FutureType {
 
 
 extension Array where Element: FutureType {
-    /// See FutureType.map
-    public func map<T>(_ callback: @escaping ([Element.Expectation]) throws -> T) -> Future<T> {
-        return flatten().map(callback)
+    /// See Future.map
+    public func map<T>(
+        to type: T.Type,
+        _ callback: @escaping ([Element.Expectation]) throws -> T
+    ) -> Future<T> {
+        return flatten().map(to: T.self, callback)
     }
 
-    /// See FutureType.then
-    public func then<T>(_ callback: @escaping ([Element.Expectation]) throws -> T) -> Future<T.Expectation>
-        where T: FutureType
-    {
-        return flatten().then(callback)
+    /// See Future.then
+    public func flatMap<T>(
+        to type: T.Type,
+        _ callback: @escaping ([Element.Expectation]) throws -> Future<T>
+    ) -> Future<T> {
+        return flatten().flatMap(to: T.self, callback)
     }
 }
 
-
-extension Array where Element: FutureType, Element.Expectation == Void {
-    /// See FutureType.map
-    public func map<T>(_ callback: @escaping () throws -> T) -> Future<T> {
-        return flatten().map { _ in
+extension Array where Element == Completable {
+    /// See Future.map
+    public func map<T>(
+        to type: T.Type,
+        _ callback: @escaping () throws -> T
+    ) -> Future<T> {
+        return flatten().map(to: T.self) { _ in
             return try callback()
         }
     }
 
-    /// See FutureType.then
-    public func then<T>(_ callback: @escaping () throws -> Future<T>) -> Future<T> {
-        return flatten().then { _ in
-            return try callback()
-        }
+    /// See Future.then
+    public func transform<T>(_ callback: @escaping () throws -> Future<T>) -> Future<T> {
+        return flatten().flatMap(to: T.self, callback)
     }
 
     /// Flattens an array of void futures into a single one.
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/advanced-futures/#combining-multiple-futures)
-    public func flatten() -> Future<Void> {
-        return then { _ in
-            return Future.done
-        }
+    public func flatten() -> Completable {
+        return self.flatten().map(to: Void.self) { _ in return }
     }
 }
 
 /// MARK: Variadic
 
 /// Calls the supplied callback when both futures have completed.
-public func then<A, B, T>(
-    _ futureA: A, _ futureB: B, _ callback: @escaping (A.Expectation, B.Expectation) throws -> (T)
-) -> Future<T.Expectation>
-    where A: FutureType, B: FutureType, T: FutureType
-{
-    return futureA.then { a -> Future<T.Expectation> in
-        return futureB.then { b -> T in
+public func flatMap<A, B, Result>(
+    to result: Result.Type,
+    _ futureA: Future<A>,
+    _ futureB: Future<B>,
+    _ callback: @escaping (A, B) throws -> (Future<Result>)
+) -> Future<Result> {
+    return futureA.flatMap(to: Result.self) { a in
+        return futureB.flatMap(to: Result.self) { b in
             return try callback(a, b)
         }
     }
 }
 
 /// Calls the supplied callback when all three futures have completed.
-public func then<A, B, C, T>(
-    _ futureA: A, _ futureB: B, _ futureC: C, _ callback: @escaping (A.Expectation, B.Expectation, C.Expectation) throws -> (T)
-) -> Future<T.Expectation>
-where A: FutureType, B: FutureType, C: FutureType, T: FutureType
-{
-    return futureA.then { a -> Future<T.Expectation> in
-        return futureB.then { b -> Future<T.Expectation> in
-            return futureC.then { c -> T in
+public func flatMap<A, B, C, Result>(
+    to result: Result.Type,
+    _ futureA: Future<A>,
+    _ futureB: Future<B>,
+    _ futureC: Future<C>,
+    _ callback: @escaping (A, B, C) throws -> (Future<Result>)
+) -> Future<Result> {
+    return futureA.flatMap(to: Result.self) { a in
+        return futureB.flatMap(to: Result.self) { b in
+            return futureC.flatMap(to: Result.self) { c in
                 return try callback(a, b, c)
             }
         }

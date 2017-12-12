@@ -84,7 +84,10 @@ extension OutputStream {
     ///     }
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/streams-introduction/#transforming-streams-without-an-intermediary-stream)
-    public func map<T>(_ transform: @escaping ((Output) throws -> (T))) -> MapStream<Output, T> {
+    public func map<T>(
+        to type: T.Type,
+        _ transform: @escaping ((Output) throws -> (T))
+    ) -> MapStream<Output, T> {
         let stream = MapStream(map: transform)
         return self.stream(to: stream)
     }

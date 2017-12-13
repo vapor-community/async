@@ -8,7 +8,7 @@ extension Array where Element == LazyFuture<Void> {
     /// complete before starting.
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/advanced-futures/#combining-multiple-futures)
-    public func syncFlatten() -> Completable {
+    public func syncFlatten() -> Signal {
         let promise = Promise<Void>()
         
         var iterator = makeIterator()
@@ -87,7 +87,7 @@ extension Array where Element: FutureType {
     }
 }
 
-extension Array where Element == Completable {
+extension Array where Element == Signal {
     /// See Future.map
     public func map<T>(
         to type: T.Type,
@@ -106,7 +106,7 @@ extension Array where Element == Completable {
     /// Flattens an array of void futures into a single one.
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/advanced-futures/#combining-multiple-futures)
-    public func flatten() -> Completable {
+    public func flatten() -> Signal {
         return self.flatten().map(to: Void.self) { _ in return }
     }
 }

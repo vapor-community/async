@@ -181,34 +181,30 @@ public extension Future {
 
 // MARK: Convenience
 
-public typealias Completable = Future<Void>
+public typealias Signal = Future<Void>
 
-/// Globally available `then` for mimicking behavior of calling `return future.then`
-/// where no starting future is available.
-///
-/// This allows you to convert any non-throwing, future-return method into a
-/// closure that accepts throwing and returns a future.
-public func then<T>(
-    to: T.Type,
-    _ callback: @escaping () throws -> Future<T>
-) -> Future<T> {
-//    fatalError("This function name?")
-    let promise = Promise(T.self)
-
-    do {
-        try callback().chain(to: promise)
-    } catch {
-        promise.fail(error)
+extension Future {
+    /// Globally available initializer for mimicking behavior of calling `return future.flatMao`
+    /// where no starting future is available.
+    ///
+    /// This allows you to convert any non-throwing, future-return method into a
+    /// closure that accepts throwing and returns a future.
+    public convenience init(_ callback: @escaping () throws -> Future<Expectation>) {
+        self.init()
+        
+        do {
+            try callback().addAwaiter(callback: self.complete)
+        } catch {
+            self.complete(with: .error(error))
+        }
     }
-
-    return promise.future
 }
 
 // MARK: Void
 
 extension Future where T == Void {
     /// Pre-completed void future.
-    public static var done: Completable {
+    public static var done: Signal {
         return _done
     }
 }

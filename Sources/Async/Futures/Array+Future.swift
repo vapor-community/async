@@ -99,7 +99,7 @@ extension Array where Element == Signal {
     }
 
     /// See Future.then
-    public func transform<T>(_ callback: @escaping () throws -> Future<T>) -> Future<T> {
+    public func transform<T>(to callback: @escaping () throws -> Future<T>) -> Future<T> {
         return flatten().flatMap(to: T.self, callback)
     }
 

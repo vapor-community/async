@@ -8,7 +8,7 @@ final class StreamTests : XCTestCase {
         var squares: [Int] = []
         var reported = false
 
-        numberEmitter.map { int in
+        numberEmitter.map(to: Int.self) { int in
             return int * int
         }.drain { square in
             squares.append(square)
@@ -55,9 +55,9 @@ final class StreamTests : XCTestCase {
         var results: [Int] = []
         var reported = false
 
-        numberEmitter.map { int in
+        numberEmitter.map(to: Int.self) { int in
             return int * 2
-        }.map { int in
+        }.map(to: Int.self) { int in
             return int / 2
         }.drain { res in
             if res == 3 {
@@ -83,9 +83,9 @@ final class StreamTests : XCTestCase {
         var results: [Int] = []
         var closed = false
 
-        numberEmitter.map { int in
+        numberEmitter.map(to: Int.self) { int in
             return int * 2
-        }.map { int in
+        }.map(to: Int.self) { int in
             return int / 2
         }.drain { res in
             results.append(res)

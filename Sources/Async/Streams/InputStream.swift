@@ -11,10 +11,28 @@
 ///
 /// Demand can be signaled via `OutputRequest.requestOutput` whenever the `InputStream`
 /// instance is capable of handling more.
-public protocol InputStream: class {
+public protocol InputStream: AnyInputStream {
     /// The type of element signaled.
     associatedtype Input
 
+    /// Data notification sent by the `OutputStream` in response to requests to `OutputRequest.requestOutput`.
+    ///
+    /// - parameter input: the element signaled
+    func onInput(_ input: Input)
+}
+
+extension InputStream {
+    /// Implement by force casting to the supported input type.
+    /// See AnyInputStream.unsafeOnInput
+    public func unsafeOnInput(_ input: Any) {
+        return onInput(input as! Input)
+    }
+}
+
+/// Type-erased InputStream. This allows streams to hold pointers to their
+/// downstream input streams without requiring that their stream class be generic
+/// on a given downstream.
+public protocol AnyInputStream: class {
     /// Invoked after calling `OutputStream.output(to:)`.
     ///
     /// No data will start flowing until `OutputRequest.requestOutput` is invoked.
@@ -30,7 +48,7 @@ public protocol InputStream: class {
     /// Data notification sent by the `OutputStream` in response to requests to `OutputRequest.requestOutput`.
     ///
     /// - parameter input: the element signaled
-    func onInput(_ input: Input)
+    func unsafeOnInput(_ input: Any)
 
     /// Failed terminal state.
     ///

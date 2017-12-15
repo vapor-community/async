@@ -21,7 +21,7 @@
 ///
 ///     print(output) /// [1, 1, 2, 2, 3, 3]
 ///
-public final class DeltaStream<Splitting>: Stream {
+public final class DeltaStream<Splitting>: Stream, OutputRequest {
     /// See InputStream.Input
     public typealias Input = Splitting
 
@@ -29,62 +29,62 @@ public final class DeltaStream<Splitting>: Stream {
     public typealias Output = Splitting
 
     /// Handles input
-    public typealias OnInput = (Input, OutputRequest) throws -> ()
+    public typealias OnInput = (Input) throws -> ()
 
     /// See OnInput
     private let onInputClosure: OnInput
 
     /// Current output request
-    private var outputRequest: OutputRequest?
-
-    /// Initial output request size
-    private let initialOutputRequest: UInt
+    private var upstream: OutputRequest?
 
     /// Connected stream
-    private var connected: BasicStream<Splitting>
+    private var downstream: AnyInputStream?
 
     /// Create a new delta stream.
     public init(
         _ splitting: Splitting.Type = Splitting.self,
-        onInput: @escaping OnInput,
-        initialOutputRequest: UInt
+        onInput: @escaping OnInput
     ) {
         self.onInputClosure = onInput
-        self.initialOutputRequest = initialOutputRequest
-        connected = .init()
+    }
+
+    public func requestOutput(_ count: UInt) {
+        upstream?.requestOutput(count)
+    }
+
+    public func cancelOutput() {
+        upstream?.cancelOutput()
     }
 
     /// See InputStream.onOutput
     public func onOutput(_ outputRequest: OutputRequest) {
-        self.outputRequest = outputRequest
-        outputRequest.requestOutput(initialOutputRequest)
+        upstream = outputRequest
     }
 
     /// See InputStream.onInput
     public func onInput(_ input: Splitting) {
-        if let outputRequest = self.outputRequest {
-            do {
-                try onInputClosure(input, outputRequest)
-            } catch {
-                onError(error)
-            }
+        do {
+            try onInputClosure(input)
+        } catch {
+            onError(error)
         }
-        connected.onInput(input)
+        downstream?.unsafeOnInput(input)
     }
 
     /// See InputStream.onError
     public func onError(_ error: Error) {
-        connected.onError(error)
+        downstream?.onError(error)
     }
 
     /// See InputStream.onClose
     public func onClose() {
-        connected.onClose()
+        downstream?.onClose()
     }
 
     /// See OutputStream.output
     public func output<S>(to inputStream: S) where S : InputStream, Splitting == S.Input {
-        connected.output(to: inputStream)
+        downstream = inputStream
+        inputStream.onOutput(self)
     }
 }
 
@@ -94,10 +94,9 @@ extension OutputStream {
     /// continue flowing through the stream unaffected.
     /// note: Errors thrown in this closure will exit through the error stream.
     public func split(
-        _ initialOutputRequest: UInt = 1,
         onInput: @escaping DeltaStream<Output>.OnInput
     ) -> DeltaStream<Output> {
-        let delta = DeltaStream(Output.self, onInput: onInput, initialOutputRequest: initialOutputRequest)
+        let delta = DeltaStream(Output.self, onInput: onInput)
         return stream(to: delta)
     }
 }

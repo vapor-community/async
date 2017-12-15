@@ -1,5 +1,5 @@
 /// A basic, generic stream implementation.
-public final class BasicStream<Data>: Stream, OutputRequest {
+public final class ClosureStream<Data>: Stream, OutputRequest {
     /// See InputStream.Input
     public typealias Input = Data
 
@@ -24,6 +24,9 @@ public final class BasicStream<Data>: Stream, OutputRequest {
     /// Handles cancellation
     public typealias OnCancel = () -> ()
 
+    /// Handles outputTo
+    public typealias OutputTo = (AnyInputStream) -> ()
+
     /// See OnInput
     public var onInputClosure: OnInput
 
@@ -42,15 +45,18 @@ public final class BasicStream<Data>: Stream, OutputRequest {
     /// See OnCancel
     public var onCancelClosure: OnCancel
 
+    public var outputToClosure: OutputTo
+
     /// Create a new BasicStream generic on the supplied type.
     public init(
         _ data: Data.Type = Data.self,
-        onInput: @escaping OnInput = { _ in },
-        onError: @escaping OnError = { _ in },
-        onClose: @escaping OnClose = { },
-        onOutput: @escaping OnOutput = { _ in },
-        onRequest: @escaping OnRequest = { _ in },
-        onCancel: @escaping OnCancel = { }
+        onInput: @escaping OnInput,
+        onError: @escaping OnError,
+        onClose: @escaping OnClose,
+        onOutput: @escaping OnOutput,
+        onRequest: @escaping OnRequest,
+        onCancel: @escaping OnCancel,
+        outputTo: @escaping OutputTo
     ) {
         onInputClosure = onInput
         onErrorClosure = onError
@@ -58,6 +64,7 @@ public final class BasicStream<Data>: Stream, OutputRequest {
         onOutputClosure = onOutput
         onRequestClosure = onRequest
         onCancelClosure = onCancel
+        outputToClosure = outputTo
     }
 
     /// See InputStream.onInput
@@ -82,9 +89,7 @@ public final class BasicStream<Data>: Stream, OutputRequest {
 
     /// See OutputStream.output
     public func output<S>(to inputStream: S) where S : InputStream, Data == S.Input {
-        onInputClosure = inputStream.onInput
-        onErrorClosure = inputStream.onError
-        onCloseClosure = inputStream.onClose
+        outputToClosure(inputStream)
         inputStream.onOutput(self)
     }
 

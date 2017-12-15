@@ -34,6 +34,7 @@ public final class EmitterStream<Emitted>: OutputStream {
     public func output<S>(to inputStream: S) where S : InputStream, Emitted == S.Input {
         let request = EmitterOutputRequest<Emitted>(inputStream)
         outputs.append(request)
+        inputStream.onOutput(request)
     }
 
     /// Emits an item to the stream
@@ -41,7 +42,7 @@ public final class EmitterStream<Emitted>: OutputStream {
         outputs = outputs.filter { !$0.isCancelled }
         for output in outputs {
             if output.remaining > 0 {
-                output.stream.onInput(emitted)
+                output.stream.unsafeOnInput(emitted)
                 output.remaining -= 1
             }
         }
@@ -55,9 +56,9 @@ public final class EmitterStream<Emitted>: OutputStream {
     }
 }
 
-fileprivate final class EmitterOutputRequest<Emitted> {
+fileprivate final class EmitterOutputRequest<Emitted>: OutputRequest {
     /// Connected stream
-    var stream: BasicStream<Emitted>
+    var stream: AnyInputStream
 
     /// Remaining requested output
     var remaining: UInt
@@ -69,10 +70,16 @@ fileprivate final class EmitterOutputRequest<Emitted> {
     init<S>(_ inputStream: S) where S: InputStream, Emitted == S.Input {
         remaining = 0
         isCancelled = false
-        let basic = BasicStream(Emitted.self)
-        stream = basic
-        basic.onRequestClosure = { self.remaining += $0 }
-        basic.onCancelClosure = { self.isCancelled = true }
-        basic.output(to: inputStream)
+        stream = inputStream
+    }
+
+    /// See OutputRequest.requestOutput
+    func requestOutput(_ count: UInt) {
+        remaining += count
+    }
+
+    /// See OutputRequest.cancelOutput
+    func cancelOutput() {
+        isCancelled = true
     }
 }

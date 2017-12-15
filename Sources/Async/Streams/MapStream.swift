@@ -21,7 +21,7 @@
 ///     print(squares) // [1, 4, 9]
 ///
 /// [Learn More →](https://docs.vapor.codes/3.0/async/streams-introduction/#transforming-streams-without-an-intermediary-stream)
-public final class MapStream<In, Out>: Stream, OutputRequest {
+public final class MapStream<In, Out>: Stream {
     /// See InputStream.Input
     public typealias Input = In
 
@@ -34,59 +34,41 @@ public final class MapStream<In, Out>: Stream, OutputRequest {
     /// The stored map closure
     public let map: MapClosure
 
-    /// Internal stream
-    private var downstream: AnyInputStream?
+    /// The upstream stream, if set
+    private var upstream: ConnectionContext?
 
-    /// Current output request
-    private var upstream: OutputRequest?
+    /// Internal stream
+    private var downstream: AnyInputStream<Out>?
 
     /// Create a new Map stream with the supplied closure.
     public init(map: @escaping MapClosure) {
         self.map = map
     }
 
-    public func requestOutput(_ count: UInt) {
-        upstream?.requestOutput(count)
-    }
-
-    public func cancelOutput() {
-        upstream?.cancelOutput()
-    }
-
-    /// See InputStream.onOutput
-    public func onOutput(_ outputRequest: OutputRequest) {
-        self.upstream = outputRequest
-    }
-
-    /// See InputStream.onInput
-    public func onInput(_ input: In) {
-        do {
-            let output = try map(input)
-            downstream?.unsafeOnInput(output)
-            upstream?.requestOutput()
-        } catch {
-            onError(error)
+    /// See InputStream.input
+    public func input(_ event: InputEvent<In>) {
+        switch event {
+        case .next(let i):
+            do {
+                let output = try map(i)
+                downstream?.next(output)
+            } catch {
+                downstream?.error(error)
+            }
+        case .connect(let upstream):
+            self.upstream = upstream
+            downstream?.connect(to: upstream)
+        case .error(let e): downstream?.error(e)
+        case .close: downstream?.close()
         }
-    }
-
-    /// See InputStream.onError
-    public func onError(_ error: Error) {
-        downstream?.onError(error)
-    }
-
-    /// See InputStream.onClose
-    public func onClose() {
-        downstream?.onClose()
     }
 
     /// See OutputStream.output
     public func output<S>(to inputStream: S) where S : InputStream, Out == S.Input {
-        downstream = inputStream
-        inputStream.onOutput(self)
-    }
-
-    private func update() {
-
+        downstream = AnyInputStream(inputStream)
+        if let upstream = upstream {
+            inputStream.connect(to: upstream)
+        }
     }
 }
 

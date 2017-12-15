@@ -36,5 +36,30 @@ extension OutputStream {
         output(to: stream)
         return stream
     }
+}
 
+/// MARK: Any
+
+/// Type erased OutputStream. This allows an output stream to be stored
+/// as a non generic type.
+public final class AnyOutputStream<Wrapped>: OutputStream {
+    /// See OutputStream.Output
+    public typealias Output = Wrapped
+
+    /// This closure connects input streams to this output stream.
+    /// Instead of accepting a generic stream, it accepts an AnyInputStream.
+    /// This allows us to store the closure as a non-generic property.
+    private let onOutput: (AnyInputStream<Wrapped>) -> ()
+
+    /// Creates a new AnyOutputStream from the supplied OutputStream.
+    public init<S>(_ wrapped: S) where S: OutputStream, S.Output == Wrapped {
+        onOutput = { inputStream in
+            wrapped.output(to: inputStream)
+        }
+    }
+
+    /// See OutputStream.output
+    public func output<S>(to inputStream: S) where S : InputStream, Wrapped == S.Input {
+        onOutput(AnyInputStream<Wrapped>(inputStream))
+    }
 }

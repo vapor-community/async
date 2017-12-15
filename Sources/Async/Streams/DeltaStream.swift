@@ -21,7 +21,7 @@
 ///
 ///     print(output) /// [1, 1, 2, 2, 3, 3]
 ///
-public final class DeltaStream<Splitting>: Stream, OutputRequest {
+public final class DeltaStream<Splitting>: Stream, ConnectionContext {
     /// See InputStream.Input
     public typealias Input = Splitting
 
@@ -30,61 +30,39 @@ public final class DeltaStream<Splitting>: Stream, OutputRequest {
 
     /// Handles input
     public typealias OnInput = (Input) throws -> ()
-
-    /// See OnInput
-    private let onInputClosure: OnInput
+    private let onInput: OnInput
 
     /// Current output request
-    private var upstream: OutputRequest?
+    private var upstream: ConnectionContext?
 
     /// Connected stream
-    private var downstream: AnyInputStream?
+    private var downstream: AnyInputStream<Splitting>?
 
     /// Create a new delta stream.
     public init(
         _ splitting: Splitting.Type = Splitting.self,
         onInput: @escaping OnInput
     ) {
-        self.onInputClosure = onInput
+        self.onInput = onInput
     }
 
-    public func requestOutput(_ count: UInt) {
-        upstream?.requestOutput(count)
-    }
-
-    public func cancelOutput() {
-        upstream?.cancelOutput()
-    }
-
-    /// See InputStream.onOutput
-    public func onOutput(_ outputRequest: OutputRequest) {
-        upstream = outputRequest
-    }
-
-    /// See InputStream.onInput
-    public func onInput(_ input: Splitting) {
-        do {
-            try onInputClosure(input)
-        } catch {
-            onError(error)
+    /// See InputStream.input
+    public func input(_ event: InputEvent<Splitting>) {
+        switch event {
+        case .next(let input): do { try onInput(input) } catch { downstream?.error(error) }
+        default: downstream?.input(event)
         }
-        downstream?.unsafeOnInput(input)
     }
 
-    /// See InputStream.onError
-    public func onError(_ error: Error) {
-        downstream?.onError(error)
-    }
-
-    /// See InputStream.onClose
-    public func onClose() {
-        downstream?.onClose()
+    /// See ConnectionContext.connection
+    public func connection(_ event: ConnectionEvent) {
+        upstream?.connection(event)
     }
 
     /// See OutputStream.output
     public func output<S>(to inputStream: S) where S : InputStream, Splitting == S.Input {
-        downstream = inputStream
-        inputStream.onOutput(self)
+        downstream = AnyInputStream(inputStream)
+        inputStream.connect(to: self)
     }
 }
 

@@ -34,7 +34,7 @@ public final class EmitterStream<Emitted>: OutputStream {
     public func output<S>(to inputStream: S) where S : InputStream, Emitted == S.Input {
         let request = EmitterOutputRequest<Emitted>(inputStream)
         outputs.append(request)
-        inputStream.onOutput(request)
+        inputStream.connect(to: request)
     }
 
     /// Emits an item to the stream
@@ -42,7 +42,7 @@ public final class EmitterStream<Emitted>: OutputStream {
         outputs = outputs.filter { !$0.isCancelled }
         for output in outputs {
             if output.remaining > 0 {
-                output.stream.unsafeOnInput(emitted)
+                output.stream.next(emitted)
                 output.remaining -= 1
             }
         }
@@ -51,14 +51,14 @@ public final class EmitterStream<Emitted>: OutputStream {
     /// Closes the emitter stream
     public func close() {
         for output in outputs {
-            output.stream.onClose()
+            output.stream.close()
         }
     }
 }
 
-fileprivate final class EmitterOutputRequest<Emitted>: OutputRequest {
+fileprivate final class EmitterOutputRequest<Emitted>: ConnectionContext {
     /// Connected stream
-    var stream: AnyInputStream
+    var stream: AnyInputStream<Emitted>
 
     /// Remaining requested output
     var remaining: UInt
@@ -70,16 +70,14 @@ fileprivate final class EmitterOutputRequest<Emitted>: OutputRequest {
     init<S>(_ inputStream: S) where S: InputStream, Emitted == S.Input {
         remaining = 0
         isCancelled = false
-        stream = inputStream
+        stream = AnyInputStream(inputStream)
     }
 
-    /// See OutputRequest.requestOutput
-    func requestOutput(_ count: UInt) {
-        remaining += count
-    }
-
-    /// See OutputRequest.cancelOutput
-    func cancelOutput() {
-        isCancelled = true
+    /// See ConnectionContext.connection
+    func connection(_ event: ConnectionEvent) {
+        switch event {
+        case .cancel: isCancelled = true
+        case .request(let count): remaining += count
+        }
     }
 }

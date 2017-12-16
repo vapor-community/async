@@ -21,7 +21,7 @@
 ///
 ///     print(output) /// [1, 1, 2, 2, 3, 3]
 ///
-public final class DeltaStream<Splitting>: Stream, ConnectionContext {
+public final class DeltaStream<Splitting>: TransformingStream {
     /// See InputStream.Input
     public typealias Input = Splitting
 
@@ -33,10 +33,10 @@ public final class DeltaStream<Splitting>: Stream, ConnectionContext {
     private let onInput: OnInput
 
     /// Current output request
-    private var upstream: ConnectionContext?
+    public var upstream: ConnectionContext?
 
     /// Connected stream
-    private var downstream: AnyInputStream<Splitting>?
+    public var downstream: AnyInputStream<Splitting>?
 
     /// Create a new delta stream.
     public init(
@@ -46,24 +46,12 @@ public final class DeltaStream<Splitting>: Stream, ConnectionContext {
         self.onInput = onInput
     }
 
-    /// See InputStream.input
-    public func input(_ event: InputEvent<Splitting>) {
-        switch event {
-        case .next(let input): do { try onInput(input) } catch { downstream?.error(error) }
-        default: downstream?.input(event)
-        }
+    /// See TransformingStream.transform
+    public func transform(_ input: Splitting) throws -> Future<Splitting> {
+        try onInput(input)
+        return Future(input)
     }
 
-    /// See ConnectionContext.connection
-    public func connection(_ event: ConnectionEvent) {
-        upstream?.connection(event)
-    }
-
-    /// See OutputStream.output
-    public func output<S>(to inputStream: S) where S : InputStream, Splitting == S.Input {
-        downstream = AnyInputStream(inputStream)
-        inputStream.connect(to: self)
-    }
 }
 
 extension OutputStream {

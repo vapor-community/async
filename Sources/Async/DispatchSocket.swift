@@ -3,13 +3,13 @@ public protocol DispatchSocket {
     /// The file descriptor.
     var descriptor: Int32 { get }
 
-    /// Reads a maxiumum of `max` bytes into the supplied mutable buffer.
+    /// Reads a maxiumum of `buffer.count` bytes into the supplied mutable buffer.
     /// Returns the actual number of bytes read.
-    func read(max: Int, into buffer: UnsafeMutableBufferPointer<UInt8>) throws -> Int
+    func read(into buffer: UnsafeMutableBufferPointer<UInt8>) throws -> Int
 
-    /// Writes a maximum of `max` bytes from the supplied buffer.
+    /// Writes a maximum of `buffer.count` bytes from the supplied buffer.
     /// Returns the actual number of bytes written.
-    func write(max: Int, from buffer: UnsafeBufferPointer<UInt8>) throws -> Int
+    func write(from buffer: UnsafeBufferPointer<UInt8>) throws -> Int
 
     /// Closes the socket.
     func close()

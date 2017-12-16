@@ -147,10 +147,7 @@ public final class DispatchSocketStream<Socket>: Stream, ConnectionContext
 
         let read: Int
         do {
-            read = try socket.read(
-                max: outputBuffer.count,
-                into: outputBuffer
-            )
+            read = try socket.read(into: outputBuffer)
         } catch {
             // any errors that occur here cannot be thrown,
             //selfso send them to stream error catcher.
@@ -195,7 +192,7 @@ public final class DispatchSocketStream<Socket>: Stream, ConnectionContext
         }
 
         do {
-            let count = try socket.write(max: input.count, from: input)
+            let count = try socket.write(from: input)
             switch count {
             case input.count:
                 // wrote everything, suspend until we get more data to write

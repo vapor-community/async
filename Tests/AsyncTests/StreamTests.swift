@@ -122,6 +122,45 @@ final class StreamTests : XCTestCase {
         XCTAssert(closed)
     }
 
+    func testTCPStream() throws {
+        // let eventLoop = DispatchEventLoop()
+        let eventLoop = try KqueueEventLoop()
+        let tcpSocket = try TCPSocket(isNonBlocking: true)
+        let tcpServer = try TCPServer(socket: tcpSocket)
+        try tcpServer.start(hostname: "localhost", port: 8123, backlog: 128)
+        let acceptStream = tcpServer.stream(on: eventLoop)
+
+        var response = Data("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi".utf8)
+
+        acceptStream.drain { upstream in
+            upstream.request(count: .max)
+        }.output { client in
+            let stream = client.stream(on: eventLoop)
+            var upstream: ConnectionContext?
+            stream.drain { context in
+                upstream = context
+                context.request(count: 1)
+            }
+            .output { buffer in
+                stream.next(buffer)
+//                response.withUnsafeBytes { (bytes: UnsafePointer<UInt8>) in
+//                    let buffer = UnsafeBufferPointer<UInt8>(start: bytes, count: response.count)
+//                    stream.next(buffer)
+//                }
+                upstream?.request(count: 1)
+            }.catch { error in
+                XCTFail("\(error)")
+            }.finally {
+                print("CLOSED")
+            }
+        }.catch { error in
+            XCTFail("\(error)")
+        }.finally {
+            print("CLOSED")
+        }
+
+        eventLoop.run()
+    }
 
     static let allTests = [
         ("testPipeline", testPipeline),

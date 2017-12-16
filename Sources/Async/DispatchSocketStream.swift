@@ -1,8 +1,14 @@
 import Dispatch
 
+enum DispatchSourceState {
+    case resumed
+    case suspended
+    case cancelled
+}
+
 /// Data stream wrapper for a dispatch socket.
-public final class DispatchSocketStream<Socket>: Stream, ConnectionContext
-    where Socket: DispatchSocket
+public final class DispatchSocketStream<Socket, EventLoop>: Stream, ConnectionContext
+    where Socket: DispatchSocket, EventLoop: Async.EventLoop
 {
     /// See InputStream.Input
     public typealias Input = UnsafeBufferPointer<UInt8>
@@ -21,10 +27,10 @@ public final class DispatchSocketStream<Socket>: Stream, ConnectionContext
     private var inputBuffer: UnsafeBufferPointer<UInt8>?
 
     /// Stores read event source.
-    private var readRequest: EventLoop.RequestHandle?
+    private var readSource: EventLoop.Source?
 
     /// Stores write event source.
-    private var writeRequest: EventLoop.RequestHandle?
+    private var writeSource: EventLoop.Source?
 
     /// Use a basic stream to easily implement our output stream.
     private var downstream: AnyInputStream<UnsafeBufferPointer<UInt8>>?
@@ -38,6 +44,12 @@ public final class DispatchSocketStream<Socket>: Stream, ConnectionContext
     /// A strong reference to the current eventloop
     private var eventLoop: EventLoop
 
+    /// The read dispatch source state
+    private var readState: DispatchSourceState
+
+    /// The write dispatch source state
+    private var writeState: DispatchSourceState
+
     internal init(socket: Socket, on eventLoop: EventLoop) {
         self.socket = socket
         self.eventLoop = eventLoop
@@ -46,6 +58,8 @@ public final class DispatchSocketStream<Socket>: Stream, ConnectionContext
         self.outputBuffer = UnsafeMutableBufferPointer<UInt8>(start: .allocate(capacity: size), count: size)
         self.inputBuffer = nil
         self.requestedOutputRemaining = 0
+        readState = .suspended
+        writeState = .suspended
     }
 
     /// See InputStream.input
@@ -92,7 +106,7 @@ public final class DispatchSocketStream<Socket>: Stream, ConnectionContext
             /// ensure was suspended and output has actually
             /// been requested
             if isSuspended && requestedOutputRemaining > 0 {
-                ensureReadRequest().resume()
+                resumeReading()
             }
         case .cancel: close()
         }
@@ -101,41 +115,56 @@ public final class DispatchSocketStream<Socket>: Stream, ConnectionContext
     /// Cancels reading
     public func close() {
         socket.close()
-        if requestedOutputRemaining == 0 {
-            /// dispatch sources must be resumed before
-            /// deinitializing
-            readRequest?.resume()
+        resumeReading()
+        resumeWriting()
+        readSource = nil
+        writeSource = nil
+    }
+
+    /// Resumes reading data.
+    private func resumeReading() {
+        switch readState {
+        case .cancelled, .resumed: break
+        case .suspended:
+            readState = .resumed
+            ensureReadSource().resume()
         }
-        readRequest = nil
-        if inputBuffer == nil {
-            /// dispatch sources must be resumed before
-            /// deinitializing
-            readRequest?.resume()
-        }
-        readRequest = nil
     }
 
     /// Suspends reading data.
     private func suspendReading() {
-        ensureReadRequest().stop()
-        /// must be zero or resume will fail
-        requestedOutputRemaining = 0
+        switch readState {
+        case .cancelled, .suspended: break
+        case .resumed:
+            readState = .suspended
+            ensureReadSource().suspend()
+        }
     }
 
     /// Resumes writing data
     private func resumeWriting() {
-        ensureWriteRequest().resume()
+        switch writeState {
+        case .cancelled, .resumed: break
+        case .suspended:
+            writeState = .resumed
+            ensureWriteSource().resume()
+        }
     }
 
     /// Suspends writing data
     private func suspendWriting() {
-        ensureWriteRequest().stop()
+        switch writeState {
+        case .cancelled, .suspended: break
+        case .resumed:
+            writeState = .suspended
+            ensureWriteSource().suspend()
+        }
     }
 
     /// Reads data and outputs to the output stream
     /// important: the socket _must_ be ready to read data
     /// as indicated by a read source.
-    private func readData() {
+    private func readData(isCancelled: Bool) {
         guard socket.isPrepared else {
             do {
                 try socket.prepareSocket()
@@ -177,7 +206,7 @@ public final class DispatchSocketStream<Socket>: Stream, ConnectionContext
     }
 
     /// Writes the buffered data to the socket.
-    private func writeData() {
+    private func writeData(isCancelled: Bool) {
         guard socket.isPrepared else {
             do {
                 try socket.prepareSocket()
@@ -208,26 +237,23 @@ public final class DispatchSocketStream<Socket>: Stream, ConnectionContext
 
     /// Returns the existing read source or creates
     /// and stores a new one
-    private func ensureReadRequest() -> EventLoop.RequestHandle {
-        guard let writeRequest = self.writeRequest else {
-            return self.eventLoop.onWritable(descriptor: socket.descriptor, readData)
+    private func ensureReadSource() -> EventLoop.Source {
+        guard let existing = self.readSource else {
+            let readSource = self.eventLoop.onReadable(descriptor: socket.descriptor, readData)
+            self.readSource = readSource
+            return readSource
         }
-        
-        return writeRequest
+        return existing
     }
 
     /// Creates a new WriteSource if there is no write source yet
-    private func ensureWriteRequest() -> EventLoop.RequestHandle {
-        guard let writeRequest = self.writeRequest else {
-            return self.eventLoop.onWritable(descriptor: socket.descriptor, writeData)
+    private func ensureWriteSource() -> EventLoop.Source {
+        guard let existing = self.writeSource else {
+            let writeSource = self.eventLoop.onWritable(descriptor: socket.descriptor, writeData)
+            self.writeSource = writeSource
+            return writeSource
         }
-
-        return writeRequest
-    }
-
-    /// Disables the read source so that another read source (such as for SSL) can take over
-    public func disableReadRequest() {
-        self.writeRequest?.stop()
+        return existing
     }
 
     /// Deallocated the pointer buffer
@@ -241,7 +267,7 @@ public final class DispatchSocketStream<Socket>: Stream, ConnectionContext
 
 extension DispatchSocket {
     /// Creates a data stream for this socket on the supplied event loop.
-    public func stream(on eventLoop: EventLoop) -> DispatchSocketStream<Self> {
+    public func stream<EventLoop>(on eventLoop: EventLoop) -> DispatchSocketStream<Self, EventLoop> {
         return DispatchSocketStream(socket: self, on: eventLoop)
     }
 }

@@ -94,7 +94,7 @@ final class FutureTests : XCTestCase {
         let group = DispatchGroup()
         group.enter()
 
-        intPromise.future.map { int in
+        intPromise.future.map (to: String.self){ int in
             return String(int)
         }.do { string in
             XCTAssertEqual(string, "42")
@@ -112,8 +112,8 @@ final class FutureTests : XCTestCase {
         let string = Promise<String>()
         let bool = Promise<Bool>()
         
-        let integer = string.future.flatMap { string in
-            return bool.future.map { bool in
+        let integer = string.future.flatMap(to: Int?.self) { string in
+            return bool.future.map (to: Int?.self){ bool in
                 return bool ? Int(string) : -1
             }
         }
@@ -130,8 +130,8 @@ final class FutureTests : XCTestCase {
         let string = Promise<String>()
         let bool = Promise<Bool>()
         
-        let integer = string.future.flatMap { string in
-            return bool.future.map { bool in
+        let integer = string.future.flatMap(to: Int?.self) { string in
+            return bool.future.map(to: Int?.self) { bool in
                 return bool ? Int(string) : -1
             }
         }
@@ -148,8 +148,8 @@ final class FutureTests : XCTestCase {
         let string = Promise<String>()
         let bool = Promise<Bool>()
         
-        let integer = string.future.flatMap { string in
-            return bool.future.map { bool -> Int? in
+        let integer = string.future.flatMap(to: Int?.self) { string in
+            return bool.future.map(to: Int?.self) { bool in
                 guard bool else {
                     throw CustomError()
                 }
@@ -181,12 +181,12 @@ final class FutureTests : XCTestCase {
         let string = Promise<String>()
         let bool = Promise<Bool>()
         
-        let integer = string.future.flatMap { string -> Future<Int?> in
+        let integer = string.future.flatMap(to: Int?.self) { string in
             guard string == "-1" else {
                 throw CustomError()
             }
             
-            return bool.future.map { bool in
+            return bool.future.map(to: Int?.self) { bool in
                 return bool ? Int(string) : -1
             }
         }

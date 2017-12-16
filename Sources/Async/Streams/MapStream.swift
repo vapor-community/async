@@ -84,6 +84,7 @@ extension OutputStream {
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/streams-introduction/#transforming-streams-without-an-intermediary-stream)
     public func map<T>(
+        to type: T.Type,
         map: @escaping MapStream<Output, T>.MapClosure
     ) -> MapStream<Output, T> {
         let map = MapStream(map: map)

@@ -66,9 +66,9 @@ final class StreamTests : XCTestCase {
         var results: [Int] = []
         var reported = false
 
-        numberEmitter.map { int in
+        numberEmitter.map(to: Int.self) { int in
             return int * 2
-        }.map { int in
+        }.map(to: Int.self) { int in
             return int / 2
         }.drain { req in
             req.request(count: .max)
@@ -98,9 +98,9 @@ final class StreamTests : XCTestCase {
         var results: [Int] = []
         var closed = false
 
-        numberEmitter.map { int in
+        numberEmitter.map(to: Int.self) { int in
             return int * 2
-        }.map { int in
+        }.map(to: Int.self) { int in
             return int / 2
         }.drain { req in
             req.request(count: .max)

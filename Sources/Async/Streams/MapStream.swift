@@ -21,15 +21,12 @@
 ///     print(squares) // [1, 4, 9]
 ///
 /// [Learn More →](https://docs.vapor.codes/3.0/async/streams-introduction/#transforming-streams-without-an-intermediary-stream)
-public final class MapStream<In, Out>: Stream, ClosableStream {
+public final class MapStream<In, Out>: Stream {
     /// See InputStream.Input
     public typealias Input = In
 
     /// See OutputStream.Output
     public typealias Output = Out
-
-    /// Internal stream
-    internal var _stream: BasicStream<Out>
 
     /// Maps input to output
     public typealias MapClosure = (In) throws -> (Out)
@@ -37,39 +34,41 @@ public final class MapStream<In, Out>: Stream, ClosableStream {
     /// The stored map closure
     public let map: MapClosure
 
-    /// See InputStream.onInput
-    public func onInput(_ input: In) {
-        do {
-            try _stream.onInput(map(input))
-        } catch {
-            onError(error)
-        }
-    }
+    /// The upstream stream, if set
+    private var upstream: ConnectionContext?
 
-    /// See InputStream.onError
-    public func onError(_ error: Error) {
-        _stream.onError(error)
-    }
-
-    /// See OutputStream.onOutput
-    public func onOutput<I>(_ input: I) where I : InputStream, Out == I.Input {
-        _stream.onOutput(input)
-    }
-
-    /// See CloseableStream.onClose
-    public func onClose(_ onClose: ClosableStream) {
-        _stream.onClose(onClose)
-    }
-
-    /// See CloseableStream.close
-    public func close() {
-        _stream.close()
-    }
+    /// Internal stream
+    private var downstream: AnyInputStream<Out>?
 
     /// Create a new Map stream with the supplied closure.
     public init(map: @escaping MapClosure) {
         self.map = map
-        _stream = .init()
+    }
+
+    /// See InputStream.input
+    public func input(_ event: InputEvent<In>) {
+        switch event {
+        case .next(let i):
+            do {
+                let output = try map(i)
+                downstream?.next(output)
+            } catch {
+                downstream?.error(error)
+            }
+        case .connect(let upstream):
+            self.upstream = upstream
+            downstream?.connect(to: upstream)
+        case .error(let e): downstream?.error(e)
+        case .close: downstream?.close()
+        }
+    }
+
+    /// See OutputStream.output
+    public func output<S>(to inputStream: S) where S : InputStream, Out == S.Input {
+        downstream = AnyInputStream(inputStream)
+        if let upstream = upstream {
+            inputStream.connect(to: upstream)
+        }
     }
 }
 
@@ -86,9 +85,9 @@ extension OutputStream {
     /// [Learn More →](https://docs.vapor.codes/3.0/async/streams-introduction/#transforming-streams-without-an-intermediary-stream)
     public func map<T>(
         to type: T.Type,
-        _ transform: @escaping ((Output) throws -> (T))
+        map: @escaping MapStream<Output, T>.MapClosure
     ) -> MapStream<Output, T> {
-        let stream = MapStream(map: transform)
-        return self.stream(to: stream)
+        let map = MapStream(map: map)
+        return stream(to: map)
     }
 }

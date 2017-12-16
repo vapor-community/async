@@ -166,7 +166,7 @@ final class FutureTests : XCTestCase {
     
     func testSimpleMap() throws {
         let future = Future<Void>(())
-        XCTAssertEqual(try future.transform(3).blockingAwait(), 3)
+        XCTAssertEqual(try future.transform(to: 3).blockingAwait(), 3)
     }
     
     func testCoalescing() throws {

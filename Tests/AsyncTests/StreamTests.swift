@@ -9,7 +9,7 @@ final class StreamTests : XCTestCase {
 
         let numberEmitter = EmitterStream(Int.self)
 
-        numberEmitter.map { num -> Int in
+        numberEmitter.map(to: Int.self) { num -> Int in
             return num * num
         }.drain { req in
             req.request(count: .max)

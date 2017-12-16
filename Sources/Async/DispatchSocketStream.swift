@@ -1,4 +1,3 @@
-import Bits
 import Dispatch
 
 /// Data stream wrapper for a dispatch socket.
@@ -6,10 +5,10 @@ public final class DispatchSocketStream<Socket>: Stream, ConnectionContext
     where Socket: DispatchSocket
 {
     /// See InputStream.Input
-    public typealias Input = ByteBuffer
+    public typealias Input = UnsafeBufferPointer<UInt8>
 
     /// See OutputStream.Output
-    public typealias Output = ByteBuffer
+    public typealias Output = UnsafeBufferPointer<UInt8>
 
     /// The client stream's underlying socket.
     public var socket: Socket
@@ -19,10 +18,10 @@ public final class DispatchSocketStream<Socket>: Stream, ConnectionContext
 
     /// Bytes from the socket are read into this buffer.
     /// Views into this buffer supplied to output streams.
-    private let outputBuffer: MutableByteBuffer
+    private let outputBuffer: UnsafeMutableBufferPointer<UInt8>
 
     /// Data being fed into the client stream is stored here.
-    private var inputBuffer: ByteBuffer?
+    private var inputBuffer: UnsafeBufferPointer<UInt8>?
 
     /// Stores read event source.
     private var readSource: DispatchSourceRead?
@@ -31,7 +30,7 @@ public final class DispatchSocketStream<Socket>: Stream, ConnectionContext
     private var writeSource: DispatchSourceWrite?
 
     /// Use a basic stream to easily implement our output stream.
-    private var downstream: AnyInputStream<ByteBuffer>?
+    private var downstream: AnyInputStream<UnsafeBufferPointer<UInt8>>?
 
     /// The current request controlling incoming write data
     private var upstream: ConnectionContext?
@@ -44,13 +43,13 @@ public final class DispatchSocketStream<Socket>: Stream, ConnectionContext
         self.eventLoop = eventLoop
         // Allocate one TCP packet
         let size = 65_507
-        self.outputBuffer = MutableByteBuffer(start: .allocate(capacity: size), count: size)
+        self.outputBuffer = UnsafeMutableBufferPointer<UInt8>(start: .allocate(capacity: size), count: size)
         self.inputBuffer = nil
         self.requestedOutputRemaining = 0
     }
 
     /// See InputStream.input
-    public func input(_ event: InputEvent<ByteBuffer>) {
+    public func input(_ event: InputEvent<UnsafeBufferPointer<UInt8>>) {
         switch event {
         case .next(let input):
             /// crash if the upstream is illegally overproducing data
@@ -74,7 +73,7 @@ public final class DispatchSocketStream<Socket>: Stream, ConnectionContext
     }
 
     /// See OutputStream.output
-    public func output<S>(to inputStream: S) where S: Async.InputStream, S.Input == ByteBuffer {
+    public func output<S>(to inputStream: S) where S: Async.InputStream, S.Input == UnsafeBufferPointer<UInt8> {
         downstream = AnyInputStream(inputStream)
         inputStream.connect(to: self)
     }
@@ -166,7 +165,7 @@ public final class DispatchSocketStream<Socket>: Stream, ConnectionContext
 
         // create a view into our internal buffer and
         // send to the output stream
-        let bufferView = ByteBuffer(
+        let bufferView = UnsafeBufferPointer<UInt8>(
             start: outputBuffer.baseAddress,
             count: read
         )

@@ -13,9 +13,6 @@ public final class DispatchSocketStream<Socket>: Stream, ConnectionContext
     /// The client stream's underlying socket.
     public var socket: Socket
 
-    /// This stream's event loop
-    public let eventLoop: EventLoop
-
     /// Bytes from the socket are read into this buffer.
     /// Views into this buffer supplied to output streams.
     private let outputBuffer: UnsafeMutableBufferPointer<UInt8>
@@ -24,10 +21,10 @@ public final class DispatchSocketStream<Socket>: Stream, ConnectionContext
     private var inputBuffer: UnsafeBufferPointer<UInt8>?
 
     /// Stores read event source.
-    private var readSource: DispatchSourceRead?
+    private var readRequest: EventLoop.RequestHandle?
 
     /// Stores write event source.
-    private var writeSource: DispatchSourceWrite?
+    private var writeRequest: EventLoop.RequestHandle?
 
     /// Use a basic stream to easily implement our output stream.
     private var downstream: AnyInputStream<UnsafeBufferPointer<UInt8>>?
@@ -37,6 +34,9 @@ public final class DispatchSocketStream<Socket>: Stream, ConnectionContext
 
     /// The amount of requested output remaining
     private var requestedOutputRemaining: UInt
+    
+    /// A strong reference to the current eventloop
+    private var eventLoop: EventLoop
 
     internal init(socket: Socket, on eventLoop: EventLoop) {
         self.socket = socket
@@ -92,7 +92,7 @@ public final class DispatchSocketStream<Socket>: Stream, ConnectionContext
             /// ensure was suspended and output has actually
             /// been requested
             if isSuspended && requestedOutputRemaining > 0 {
-                ensureReadSource().resume()
+                ensureReadRequest().resume()
             }
         case .cancel: close()
         }
@@ -104,32 +104,32 @@ public final class DispatchSocketStream<Socket>: Stream, ConnectionContext
         if requestedOutputRemaining == 0 {
             /// dispatch sources must be resumed before
             /// deinitializing
-            readSource?.resume()
+            readRequest?.resume()
         }
-        readSource = nil
+        readRequest = nil
         if inputBuffer == nil {
             /// dispatch sources must be resumed before
             /// deinitializing
-            writeSource?.resume()
+            readRequest?.resume()
         }
-        writeSource = nil
+        readRequest = nil
     }
 
     /// Suspends reading data.
     private func suspendReading() {
-        ensureReadSource().suspend()
+        ensureReadRequest().stop()
         /// must be zero or resume will fail
         requestedOutputRemaining = 0
     }
 
     /// Resumes writing data
     private func resumeWriting() {
-        ensureWriteSource().resume()
+        ensureWriteRequest().resume()
     }
 
     /// Suspends writing data
     private func suspendWriting() {
-        ensureWriteSource().suspend()
+        ensureWriteRequest().stop()
     }
 
     /// Reads data and outputs to the output stream
@@ -208,53 +208,26 @@ public final class DispatchSocketStream<Socket>: Stream, ConnectionContext
 
     /// Returns the existing read source or creates
     /// and stores a new one
-    private func ensureReadSource() -> DispatchSourceRead {
-        guard let existing = readSource else {
-            /// create a new read source
-            let source = DispatchSource.makeReadSource(
-                fileDescriptor: socket.descriptor,
-                queue: eventLoop.queue
-            )
-
-            /// handle socket ready to read
-            source.setEventHandler(handler: readData)
-
-            /// handle a cancel event
-            source.setCancelHandler(handler: close)
-
-            readSource = source
-            return source
+    private func ensureReadRequest() -> EventLoop.RequestHandle {
+        guard let writeRequest = self.writeRequest else {
+            return self.eventLoop.onWritable(descriptor: socket.descriptor, readData)
         }
-
-        return existing
+        
+        return writeRequest
     }
 
     /// Creates a new WriteSource if there is no write source yet
-    private func ensureWriteSource() -> DispatchSourceWrite {
-        guard let source = writeSource else {
-            /// create a new write source
-            let source = DispatchSource.makeWriteSource(
-                fileDescriptor: socket.descriptor,
-                queue: eventLoop.queue
-            )
-
-            /// handle socket ready to write
-            source.setEventHandler(handler: writeData)
-
-            /// handle a cancel event
-            source.setCancelHandler(handler: close)
-
-            writeSource = source
-            return source
+    private func ensureWriteRequest() -> EventLoop.RequestHandle {
+        guard let writeRequest = self.writeRequest else {
+            return self.eventLoop.onWritable(descriptor: socket.descriptor, writeData)
         }
 
-        return source
+        return writeRequest
     }
 
     /// Disables the read source so that another read source (such as for SSL) can take over
-    public func disableReadSource() {
-        self.readSource?.cancel()
-        self.readSource?.suspend()
+    public func disableReadRequest() {
+        self.writeRequest?.stop()
     }
 
     /// Deallocated the pointer buffer

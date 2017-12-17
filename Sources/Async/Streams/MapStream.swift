@@ -34,56 +34,41 @@ public final class MapStream<In, Out>: Stream {
     /// The stored map closure
     public let map: MapClosure
 
+    /// The upstream stream, if set
+    private var upstream: ConnectionContext?
+
     /// Internal stream
-    internal var connected: BasicStream<Out>
-
-    /// Current output request
-    private var outputRequest: OutputRequest?
-
-    /// Initial output request size
-    private let initialOutputRequest: UInt
+    private var downstream: AnyInputStream<Out>?
 
     /// Create a new Map stream with the supplied closure.
-    public init(
-        map: @escaping MapClosure,
-        initialOutputRequest: UInt
-    ) {
+    public init(map: @escaping MapClosure) {
         self.map = map
-        self.initialOutputRequest =  initialOutputRequest
-        connected = .init()
     }
 
-    /// See InputStream.onOutput
-    public func onOutput(_ outputRequest: OutputRequest) {
-        self.outputRequest = outputRequest
-        outputRequest.requestOutput(initialOutputRequest)
-    }
-
-    /// See InputStream.onInput
-    public func onInput(_ input: In) {
-        do {
-            let output = try map(input)
-            print(connected)
-            connected.onInput(output)
-            outputRequest?.requestOutput()
-        } catch {
-            onError(error)
+    /// See InputStream.input
+    public func input(_ event: InputEvent<In>) {
+        switch event {
+        case .next(let i):
+            do {
+                let output = try map(i)
+                downstream?.next(output)
+            } catch {
+                downstream?.error(error)
+            }
+        case .connect(let upstream):
+            self.upstream = upstream
+            downstream?.connect(to: upstream)
+        case .error(let e): downstream?.error(e)
+        case .close: downstream?.close()
         }
-    }
-
-    /// See InputStream.onError
-    public func onError(_ error: Error) {
-        connected.onError(error)
-    }
-
-    /// See InputStream.onClose
-    public func onClose() {
-        connected.onClose()
     }
 
     /// See OutputStream.output
     public func output<S>(to inputStream: S) where S : InputStream, Out == S.Input {
-        connected.output(to: inputStream)
+        downstream = AnyInputStream(inputStream)
+        if let upstream = upstream {
+            inputStream.connect(to: upstream)
+        }
     }
 }
 
@@ -99,10 +84,10 @@ extension OutputStream {
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/streams-introduction/#transforming-streams-without-an-intermediary-stream)
     public func map<T>(
-        _ initialOutputRequest: UInt = 1,
+        to type: T.Type,
         map: @escaping MapStream<Output, T>.MapClosure
     ) -> MapStream<Output, T> {
-        let map = MapStream(map: map, initialOutputRequest: initialOutputRequest)
+        let map = MapStream(map: map)
         return stream(to: map)
     }
 }

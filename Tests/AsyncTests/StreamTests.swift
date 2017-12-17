@@ -9,11 +9,12 @@ final class StreamTests : XCTestCase {
 
         let numberEmitter = EmitterStream(Int.self)
 
-        numberEmitter.map { num -> Int in
+        numberEmitter.map(to: Int.self) { num -> Int in
             return num * num
-        }.drain(1) { num, req in
+        }.drain { req in
+            req.request(count: .max)
+        }.output { num in
             squares.append(num)
-            req.requestOutput()
             if num == 9 {
                 throw CustomError()
             }
@@ -40,12 +41,12 @@ final class StreamTests : XCTestCase {
 
         var output: [Int] = []
 
-        numberEmitter.split { int, req in
+        numberEmitter.split { int in
             output.append(int)
-            req.requestOutput()
-        }.drain { int, req in
+        }.drain { req in
+            req.request(count: .max)
+        }.output { int in
             output.append(int)
-            req.requestOutput()
         }.catch { err in
             XCTFail("\(err)")
         }.finally {
@@ -65,16 +66,17 @@ final class StreamTests : XCTestCase {
         var results: [Int] = []
         var reported = false
 
-        numberEmitter.map { int in
+        numberEmitter.map(to: Int.self) { int in
             return int * 2
-        }.map { int in
+        }.map(to: Int.self) { int in
             return int / 2
-        }.drain { res, req in
+        }.drain { req in
+            req.request(count: .max)
+        }.output { res in
             if res == 3 {
                 throw CustomError()
             }
             results.append(res)
-            req.requestOutput()
         }.catch { error in
             reported = true
             XCTAssert(error is CustomError)
@@ -96,13 +98,14 @@ final class StreamTests : XCTestCase {
         var results: [Int] = []
         var closed = false
 
-        numberEmitter.map { int in
+        numberEmitter.map(to: Int.self) { int in
             return int * 2
-        }.map { int in
+        }.map(to: Int.self) { int in
             return int / 2
-        }.drain { res, req in
+        }.drain { req in
+            req.request(count: .max)
+        }.output { res in
             results.append(res)
-            req.requestOutput()
         }.catch { error in
             XCTFail()
         }.finally {
@@ -118,7 +121,6 @@ final class StreamTests : XCTestCase {
         XCTAssertEqual(results, [1, 2, 3])
         XCTAssert(closed)
     }
-
 
     static let allTests = [
         ("testPipeline", testPipeline),

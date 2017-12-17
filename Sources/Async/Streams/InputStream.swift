@@ -11,10 +11,19 @@
 ///
 /// Demand can be signaled via `OutputRequest.requestOutput` whenever the `InputStream`
 /// instance is capable of handling more.
-public protocol InputStream: class {
+public protocol InputStream {
     /// The type of element signaled.
     associatedtype Input
 
+    /// Data notification sent by the `OutputStream` in response to requests to `OutputRequest.requestOutput`.
+    ///
+    /// - parameter input: the element signaled
+    func input(_ event: InputEvent<Input>)
+}
+
+/// MARK: Event
+
+public enum InputEvent<Input> {
     /// Invoked after calling `OutputStream.output(to:)`.
     ///
     /// No data will start flowing until `OutputRequest.requestOutput` is invoked.
@@ -25,22 +34,87 @@ public protocol InputStream: class {
     /// The `OutputStream` will send notifications only in response to `OutputRequest.requestOutput`.
     ///
     /// - parameter outputRequest: `OutputRequest` that allows requesting data via `OutputRequest.requestOutput`
-    func onOutput(_ outputRequest: OutputRequest)
+    case connect(ConnectionContext)
 
     /// Data notification sent by the `OutputStream` in response to requests to `OutputRequest.requestOutput`.
     ///
     /// - parameter input: the element signaled
-    func onInput(_ input: Input)
+    case next(Input)
 
     /// Failed terminal state.
     ///
     /// No further events will be sent even if `OutputRequest.requestOutput` is invoked again.
     ///
     /// - parameter error: the error signaled
-    func onError(_ error: Error)
+    case error(Error)
 
     /// Successful terminal state.
     ///
     /// No further events will be sent even if `OutputRequest.requestOutput` is invoked again.
-    func onClose()
+    case close
+}
+
+/// MARK: Convenience
+
+extension InputStream {
+    /// Invoked after calling `OutputStream.output(to:)`.
+    ///
+    /// No data will start flowing until `OutputRequest.requestOutput` is invoked.
+    ///
+    /// It is the responsibility of this `InputStream` instance to call
+    /// `OutputRequest.requestOutput` whenever more data is wanted.
+    ///
+    /// The `OutputStream` will send notifications only in response to `OutputRequest.requestOutput`.
+    ///
+    /// - parameter outputRequest: `OutputRequest` that allows requesting data via `OutputRequest.requestOutput`
+    public func connect(to context: ConnectionContext) {
+        input(.connect(context))
+    }
+
+    /// Data notification sent by the `OutputStream` in response to requests to `OutputRequest.requestOutput`.
+    ///
+    /// - parameter input: the element signaled
+    public func next(_ next: Input) {
+        input(.next(next))
+    }
+
+
+    /// Failed terminal state.
+    ///
+    /// No further events will be sent even if `OutputRequest.requestOutput` is invoked again.
+    ///
+    /// - parameter error: the error signaled
+    public func error(_ error: Error) {
+        input(.error(error))
+    }
+
+    /// Successful terminal state.
+    ///
+    /// No further events will be sent even if `OutputRequest.requestOutput` is invoked again.
+    public func close() {
+        input(.close)
+    }
+}
+
+/// MARK: Any
+
+/// Type-erased InputStream. This allows streams to hold pointers to their
+/// downstream input streams without requiring that their stream class be generic
+/// on a given downstream.
+public final class AnyInputStream<Wrapped>: InputStream {
+    /// See InputStream.Input
+    public typealias Input = Wrapped
+
+    /// On input event handler.
+    private let onInput: (InputEvent<Input>) -> ()
+
+    /// Create a new any input stream from a wrapped stream.
+    public init<S>(_ wrapped: S) where S: InputStream, S.Input == Wrapped {
+        onInput = wrapped.input
+    }
+
+    /// See InputStream.input
+    public func input(_ event: InputEvent<Input>) {
+        onInput(event)
+    }
 }

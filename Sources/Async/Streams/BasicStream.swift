@@ -1,100 +1,47 @@
 /// A basic, generic stream implementation.
-public final class BasicStream<Data>: Stream, OutputRequest {
+public final class ClosureStream<Data>: Stream, ConnectionContext {
     /// See InputStream.Input
     public typealias Input = Data
 
     /// See OutputStream.Output
     public typealias Output = Data
 
-    /// Handles input
-    public typealias OnInput = (Input) -> ()
+    /// Handles output stream
+    public typealias OnOutput = (AnyInputStream<Data>) -> ()
+    private let onOutput: OnOutput
 
-    /// Handles errors
-    public typealias OnError = (Error) -> ()
+    /// Handles input stream
+    public typealias OnInput = (InputEvent<Data>) -> ()
+    private let onInput: OnInput
 
-    /// Handles close
-    public typealias OnClose = () -> ()
-
-    /// Handles output
-    public typealias OnOutput = (OutputRequest) -> ()
-
-    /// Handles output request
-    public typealias OnRequest = (UInt) -> ()
-
-    /// Handles cancellation
-    public typealias OnCancel = () -> ()
-
-    /// See OnInput
-    public var onInputClosure: OnInput
-
-    /// See OnError
-    public var onErrorClosure: OnError
-
-    /// See OnClose
-    public var onCloseClosure: OnClose
-
-    /// See OnOutput
-    public var onOutputClosure: OnOutput
-
-    /// See OnRequest
-    public var onRequestClosure: OnRequest
-
-    /// See OnCancel
-    public var onCancelClosure: OnCancel
+    /// Handles connection context
+    public typealias OnConnection = (ConnectionEvent) -> ()
+    private let onConnection: OnConnection
 
     /// Create a new BasicStream generic on the supplied type.
     public init(
-        _ data: Data.Type = Data.self,
-        onInput: @escaping OnInput = { _ in },
-        onError: @escaping OnError = { _ in },
-        onClose: @escaping OnClose = { },
-        onOutput: @escaping OnOutput = { _ in },
-        onRequest: @escaping OnRequest = { _ in },
-        onCancel: @escaping OnCancel = { }
+        onInput: @escaping OnInput,
+        onOutput: @escaping OnOutput,
+        onConnection: @escaping OnConnection
     ) {
-        onInputClosure = onInput
-        onErrorClosure = onError
-        onCloseClosure = onClose
-        onOutputClosure = onOutput
-        onRequestClosure = onRequest
-        onCancelClosure = onCancel
+        self.onInput = onInput
+        self.onOutput = onOutput
+        self.onConnection = onConnection
     }
 
-    /// See InputStream.onInput
-    public func onInput(_ input: Data) {
-        onInputClosure(input)
-    }
-
-    /// See InputStream.onError
-    public func onError(_ error: Error) {
-        onErrorClosure(error)
-    }
-
-    /// See InputStream.onClose
-    public func onClose() {
-        onCloseClosure()
-    }
-
-    /// See InputStream.onOutput
-    public func onOutput(_ outputRequest: OutputRequest) {
-        onOutputClosure(outputRequest)
+    /// See InputStream.input
+    public func input(_ event: InputEvent<Data>) {
+        onInput(event)
     }
 
     /// See OutputStream.output
     public func output<S>(to inputStream: S) where S : InputStream, Data == S.Input {
-        onInputClosure = inputStream.onInput
-        onErrorClosure = inputStream.onError
-        onCloseClosure = inputStream.onClose
-        inputStream.onOutput(self)
+        let wrapped = AnyInputStream(inputStream)
+        onOutput(wrapped)
     }
 
-    /// See OutputRequest.onRequest
-    public func requestOutput(_ count: UInt) {
-        onRequestClosure(count)
-    }
-
-    /// See OutputRequest.onCancel
-    public func cancelOutput() {
-        onCancelClosure()
+    /// See ConnectionContext.connection
+    public func connection(_ event: ConnectionEvent) {
+        onConnection(event)
     }
 }

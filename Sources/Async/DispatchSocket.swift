@@ -1,5 +1,5 @@
 /// A dispatch source compatible socket.
-public protocol DispatchSocket {
+public protocol Socket {
     /// The file descriptor.
     var descriptor: Int32 { get }
 
@@ -21,7 +21,7 @@ public protocol DispatchSocket {
     func prepareSocket() throws
 }
 
-extension DispatchSocket {
+extension Socket {
     /// See DispatchSocket.isPrepared
     public var isPrepared: Bool { return true }
 

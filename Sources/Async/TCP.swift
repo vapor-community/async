@@ -13,7 +13,7 @@ import Darwin
 import Foundation
 
 /// Any TCP socket. It doesn't specify being a server or client yet.
-public struct TCPSocket: DispatchSocket {
+public struct TCPSocket: Socket {
     /// The file descriptor related to this socket
     public let descriptor: Int32
 
@@ -340,13 +340,6 @@ public final class TCPClient {
     public func close() {
         willClose?()
         socket.close()
-    }
-}
-
-extension TCPClient {
-    /// Create a dispatch socket stream for this client.
-    public func stream<EventLoop>(on eventLoop: EventLoop) -> DispatchSocketStream<TCPSocket, EventLoop> {
-        return socket.stream(on: eventLoop)
     }
 }
 

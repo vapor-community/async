@@ -38,6 +38,7 @@ public final class KqueueEventLoop: EventLoop {
     }
 
     public func run() {
+        Thread.current.name = label
         print("[\(label)] Running")
         run: while true {
             let eventCount = kevent(kq, nil, 0, eventlist.baseAddress, Int32(eventlist.count), nil)
@@ -100,7 +101,6 @@ public final class KqueueEventSource: EventSource {
     let kq: Int32
 
     internal init(descriptor: Int32, kq: Int32, callback: @escaping EventLoop.EventCallback) {
-        // print("\(type(of: self)).\(#function)")
         self.callback = callback
         isActive = false
         isCancelled = false
@@ -168,5 +168,8 @@ public final class KqueueEventSource: EventSource {
             isCancelled = true
         }
         callback(eof)
+    }
+
+    deinit {
     }
 }

@@ -38,24 +38,17 @@ func test<EventLoop>(_ type: EventLoop.Type) throws
     acceptStream.drain { upstream in
         upstream.request(count: .max)
     }.output { client in
+        // print(client)
         loopOffset += 1
         if loopOffset >= loops.count {
             loopOffset = 0
         }
-        let stream = client.stream(on: loops[loopOffset])
-        var upstream: ConnectionContext?
-        stream.drain { context in
-            upstream = context
-            context.request(count: 1)
-        }
-        .output { buffer in
-            stream.next(responseBuffer)
-            upstream?.request(count: 1)
-        }.catch { error in
-            print("\(error)")
-        }.finally {
-            print("CLOSED")
-        }
+        let source = client.socket.source(on: loops[loopOffset])
+        let sink = client.socket.sink(on: loops[loopOffset])
+        source.map(to: ByteBuffer.self) { buffer in
+            // print(String(bytes: buffer, encoding: .utf8)!)
+            return responseBuffer
+        }.output(to: sink)
     }.catch { error in
         print("\(error)")
     }.finally {

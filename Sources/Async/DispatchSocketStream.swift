@@ -24,7 +24,7 @@ public final class DispatchSocketStream<Socket, EventLoop>: Stream, ConnectionCo
 
     /// Bytes from the socket are read into this buffer.
     /// Views into this buffer supplied to output streams.
-    private let outputBuffer: UnsafeMutableBufferPointer<UInt8>
+    private let outputBuffer: UnsafeMutableBufferPointer<UInt8> /// FIXME: add additional output buffers to amortize calls to suspend read
 
     /// Data being fed into the client stream is stored here.
     private var inputBuffer: UnsafeBufferPointer<UInt8>?

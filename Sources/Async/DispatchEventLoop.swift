@@ -45,4 +45,11 @@ public enum DispatchEventSource: EventSource {
         case .write(let write): write.resume()
         }
     }
+
+    public func cancel() {
+        switch self {
+        case .read(let read): read.cancel()
+        case .write(let write): write.cancel()
+        }
+    }
 }

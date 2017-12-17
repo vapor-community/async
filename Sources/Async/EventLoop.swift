@@ -10,6 +10,7 @@ public protocol EventLoop {
 public protocol EventSource {
     func suspend()
     func resume()
+    func cancel()
 }
 
 /// An error converting types.

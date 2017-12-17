@@ -117,6 +117,8 @@ public final class DispatchSocketStream<Socket, EventLoop>: Stream, ConnectionCo
         socket.close()
         resumeReading()
         resumeWriting()
+        readSource?.cancel()
+        writeSource?.cancel()
         readSource = nil
         writeSource = nil
     }
@@ -165,6 +167,11 @@ public final class DispatchSocketStream<Socket, EventLoop>: Stream, ConnectionCo
     /// important: the socket _must_ be ready to read data
     /// as indicated by a read source.
     private func readData(isCancelled: Bool) {
+        guard !isCancelled else {
+            close()
+            return
+        }
+
         guard socket.isPrepared else {
             do {
                 try socket.prepareSocket()
@@ -207,6 +214,11 @@ public final class DispatchSocketStream<Socket, EventLoop>: Stream, ConnectionCo
 
     /// Writes the buffered data to the socket.
     private func writeData(isCancelled: Bool) {
+        guard !isCancelled else {
+            close()
+            return
+        }
+        
         guard socket.isPrepared else {
             do {
                 try socket.prepareSocket()

@@ -36,6 +36,10 @@ public final class SelectEventLoopSource: EventSource {
         callback(false)
     }
 
+    public func cancel() {
+        // cancel
+    }
+
     deinit {
         remove(self.descriptor)
     }

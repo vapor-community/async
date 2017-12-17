@@ -142,11 +142,11 @@ final class StreamTests : XCTestCase {
                 context.request(count: 1)
             }
             .output { buffer in
-                stream.next(buffer)
-//                response.withUnsafeBytes { (bytes: UnsafePointer<UInt8>) in
-//                    let buffer = UnsafeBufferPointer<UInt8>(start: bytes, count: response.count)
-//                    stream.next(buffer)
-//                }
+//                stream.next(buffer)
+                response.withUnsafeBytes { (bytes: UnsafePointer<UInt8>) in
+                    let buffer = UnsafeBufferPointer<UInt8>(start: bytes, count: response.count)
+                    stream.next(buffer)
+                }
                 upstream?.request(count: 1)
             }.catch { error in
                 XCTFail("\(error)")

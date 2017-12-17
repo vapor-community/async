@@ -106,16 +106,12 @@ public final class SocketSource<Socket, EventLoop>: OutputStream, ConnectionCont
     /// A strong reference to the current eventloop
     private var eventLoop: EventLoop
 
-    /// The read dispatch source state
-    private var readState: EventLoopSourceState
-
     internal init(socket: Socket, on eventLoop: EventLoop) {
         self.socket = socket
         self.eventLoop = eventLoop
         // Allocate one TCP packet
         self.buffers = OutputBuffers(count: 4, capacity: 4096)
         self.requestedOutputRemaining = 0
-        readState = .suspended
     }
 
     /// See OutputStream.output
@@ -168,21 +164,19 @@ public final class SocketSource<Socket, EventLoop>: OutputStream, ConnectionCont
 
     /// Resumes reading data.
     private func resumeReading() {
-        switch readState {
+        let source = ensureReadSource()
+        switch source.state {
         case .cancelled, .resumed: break
-        case .suspended:
-            readState = .resumed
-            ensureReadSource().resume()
+        case .suspended: source.resume()
         }
     }
 
     /// Suspends reading data.
     private func suspendReading() {
-        switch readState {
+        let source = ensureReadSource()
+        switch source.state {
         case .cancelled, .suspended: break
-        case .resumed:
-            readState = .suspended
-            ensureReadSource().suspend()
+        case .resumed: source.suspend()
         }
     }
 

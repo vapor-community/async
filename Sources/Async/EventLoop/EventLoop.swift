@@ -10,12 +10,6 @@ public protocol EventLoop {
     func run()
 }
 
-public protocol EventSource {
-    func suspend()
-    func resume()
-    func cancel()
-}
-
 /// An error converting types.
 public struct EventLoopError: Error {
     /// See Debuggable.reason

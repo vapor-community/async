@@ -1,59 +1,42 @@
 import Dispatch
 import Foundation
 
+/// Dispatch based `EventLoop` implementation.
 public final class DispatchEventLoop: EventLoop {
+    /// See EventLoop.Source
     public typealias Source = DispatchEventSource
-    private let queue: DispatchQueue
 
+    /// See EventLoop.label
     public var label: String {
         return queue.label
     }
 
+    /// The internal dispatch queue powering this event loop.
+    private let queue: DispatchQueue
+
+    /// Create a new `DispatchEventLoop`.
     public init(label: String) {
         queue = DispatchQueue(label: label)
     }
 
+    /// See EventLoop.onReadable
     public func onReadable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> DispatchEventSource {
         let source = DispatchSource.makeReadSource(fileDescriptor: descriptor, queue: queue)
         source.setEventHandler { callback(false) }
         source.setCancelHandler { callback(true) }
-        return .read(source)
+        return .init(source: source)
     }
 
+    /// See EventLoop.onWritable
     public func onWritable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> DispatchEventSource {
         let source = DispatchSource.makeWriteSource(fileDescriptor: descriptor, queue: queue)
         source.setEventHandler { callback(false) }
         source.setCancelHandler { callback(true) }
-        return .write(source)
+        return .init(source: source)
     }
 
+    /// See EventLoop.run
     public func run() {
         RunLoop.main.run()
-    }
-}
-
-public enum DispatchEventSource: EventSource {
-    case read(DispatchSourceRead)
-    case write(DispatchSourceWrite)
-
-    public func suspend() {
-        switch self {
-        case .read(let read): read.suspend()
-        case .write(let write): write.suspend()
-        }
-    }
-
-    public func resume() {
-        switch self {
-        case .read(let read): read.resume()
-        case .write(let write): write.resume()
-        }
-    }
-
-    public func cancel() {
-        switch self {
-        case .read(let read): read.cancel()
-        case .write(let write): write.cancel()
-        }
     }
 }

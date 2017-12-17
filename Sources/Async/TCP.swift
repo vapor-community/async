@@ -7,6 +7,18 @@ public typealias MutableByteBuffer = UnsafeMutableBufferPointer<Byte>
 public typealias BytesPointer = UnsafePointer<Byte>
 public typealias MutableBytesPointer = UnsafeMutablePointer<Byte>
 
+extension UnsafeMutableBufferPointer {
+    public static func allocate(count: Int) -> UnsafeMutableBufferPointer<Element> {
+        let pointer = UnsafeMutablePointer<Element>.allocate(capacity: count)
+        return .init(start: pointer, count: count)
+    }
+
+    public func deallocate() {
+        baseAddress?.deinitialize()
+        baseAddress?.deallocate(capacity: count)
+    }
+}
+
 // MARK: TCP
 import Dispatch
 import Darwin

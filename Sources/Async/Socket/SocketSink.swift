@@ -1,15 +1,6 @@
 import Dispatch
 import Foundation
 
-enum EventLoopSourceState {
-    case resumed
-    case suspended
-    case cancelled
-}
-
-//let size = 4096
-//let buffer = UnsafeMutableBufferPointer<UInt8>(start: .allocate(capacity: size), count: size)
-
 /// Data stream wrapper for a dispatch socket.
 public final class SocketSink<Socket, EventLoop>: InputStream
     where Socket: Async.Socket, EventLoop: Async.EventLoop
@@ -32,15 +23,11 @@ public final class SocketSink<Socket, EventLoop>: InputStream
     /// A strong reference to the current eventloop
     private var eventLoop: EventLoop
 
-    /// The write dispatch source state
-    private var writeState: EventLoopSourceState
-
     internal init(socket: Socket, on eventLoop: EventLoop) {
         self.socket = socket
         self.eventLoop = eventLoop
         // Allocate one TCP packet
         self.inputBuffer = nil
-        writeState = .suspended
     }
 
     /// See InputStream.input
@@ -78,21 +65,19 @@ public final class SocketSink<Socket, EventLoop>: InputStream
 
     /// Resumes writing data
     private func resumeWriting() {
-        switch writeState {
+        let source = ensureWriteSource()
+        switch source.state {
         case .cancelled, .resumed: break
-        case .suspended:
-            writeState = .resumed
-            ensureWriteSource().resume()
+        case .suspended: source.resume()
         }
     }
 
     /// Suspends writing data
     private func suspendWriting() {
-        switch writeState {
+        let source = ensureWriteSource()
+        switch source.state {
         case .cancelled, .suspended: break
-        case .resumed:
-            writeState = .suspended
-            ensureWriteSource().suspend()
+        case .resumed: source.suspend()
         }
     }
 

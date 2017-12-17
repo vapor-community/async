@@ -1,16 +1,29 @@
 import Darwin
 import Foundation
 
+/// Kqueue based `EventLoop` implementation.
 public final class KqueueEventLoop: EventLoop {
+    /// See EventLoop.Source
     public typealias Source = KqueueEventSource
 
+    /// See EventLoop.label
     public let label: String
 
+    /// The `kqueue` handle.
     private let kq: Int32
+
+    /// Event list buffer. This will be passed to
+    /// kevent each time the event loop is ready for
+    /// additional signals.
     private var eventlist: UnsafeMutableBufferPointer<kevent>
+
+    /// Read source buffer.
     private var readSources: UnsafeMutableBufferPointer<KqueueEventSource?>
+
+    /// Write source buffer.
     private var writeSources: UnsafeMutableBufferPointer<KqueueEventSource?>
 
+    /// Create a new `KqueueEventLoop`
     public init(label: String) throws {
         self.label = label
         let status = kqueue()
@@ -18,11 +31,18 @@ public final class KqueueEventLoop: EventLoop {
             throw EventLoopError(identifier: "kqueue", reason: "Could not create kqueue.")
         }
         self.kq = status
-        eventlist = .allocate(count: 4096)
-        readSources = .allocate(count: 4096)
-        writeSources = .allocate(count: 4096)
+
+        /// the maxiumum amount of events to handle per cycle
+        let maxEvents = 4096
+        eventlist = .allocate(count: maxEvents)
+
+        /// no descriptor should be larger than this number
+        let maxDescriptor = 4096
+        readSources = .allocate(count: maxDescriptor)
+        writeSources = .allocate(count: maxDescriptor)
     }
 
+    /// See EventLoop.onReadable
     public func onReadable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> KqueueEventSource {
         let source = KqueueEventSource(descriptor: descriptor, kq: kq, callback: callback)
         source.event.filter = Int16(EVFILT_READ)
@@ -30,6 +50,7 @@ public final class KqueueEventLoop: EventLoop {
         return source
     }
 
+    /// See EventLoop.onWritable
     public func onWritable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> KqueueEventSource {
         let source = KqueueEventSource(descriptor: descriptor, kq: kq, callback: callback)
         source.event.filter = Int16(EVFILT_WRITE)
@@ -37,6 +58,7 @@ public final class KqueueEventLoop: EventLoop {
         return source
     }
 
+    /// See EventLoop.run
     public func run() {
         Thread.current.name = label
         print("[\(label)] Running")
@@ -78,98 +100,5 @@ public final class KqueueEventLoop: EventLoop {
         eventlist.deallocate()
         readSources.deallocate()
         writeSources.deallocate()
-    }
-}
-
-extension UnsafeMutableBufferPointer {
-    fileprivate static func allocate(count: Int) -> UnsafeMutableBufferPointer<Element> {
-        let pointer = UnsafeMutablePointer<Element>.allocate(capacity: count)
-        return .init(start: pointer, count: count)
-    }
-
-    fileprivate func deallocate() {
-        baseAddress?.deinitialize()
-        baseAddress?.deallocate(capacity: count)
-    }
-}
-
-public final class KqueueEventSource: EventSource {
-    private var callback: EventLoop.EventCallback
-    private var isActive: Bool
-    private var isCancelled: Bool
-    var event: kevent
-    let kq: Int32
-
-    internal init(descriptor: Int32, kq: Int32, callback: @escaping EventLoop.EventCallback) {
-        self.callback = callback
-        isActive = false
-        isCancelled = false
-        self.kq = kq
-        var event = kevent()
-        event.ident = UInt(descriptor)
-        event.flags = UInt16(EV_ADD | EV_DISABLE)
-        event.fflags = 0
-        event.data = 0
-        self.event = event
-    }
-
-    private func update() {
-        guard !isCancelled else {
-            return
-        }
-
-        let response = kevent(kq, &event, 1, nil, 0, nil)
-        if response < 0 {
-            let reason = String(cString: strerror(errno))
-            print("An error occured during KqueueEventSource.update: \(reason)")
-        }
-    }
-
-    public func suspend() {
-        guard isActive else {
-            fatalError("Called `.suspend()` on a suspended KqueueEventSource.")
-        }
-        guard !isCancelled else {
-            fatalError("Called `.suspend()` on a cancelled KqueueEventSource.")
-        }
-
-        event.flags = UInt16(EV_ADD | EV_DISABLE)
-        update()
-        isActive = false
-    }
-
-    public func resume() {
-        guard !isActive else {
-            fatalError("Called `.resume()` on a resumed KqueueEventSource.")
-        }
-        guard !isCancelled else {
-            fatalError("Called `.resume()` on a cancelled KqueueEventSource.")
-        }
-
-        event.flags = UInt16(EV_ADD | EV_ENABLE)
-        update()
-        isActive = true
-    }
-
-    public func cancel() {
-        guard !isCancelled else {
-            fatalError("Called `.cancel()` on a cancelled KqueueEventSource.")
-        }
-        event.flags = UInt16(EV_DELETE)
-        isCancelled = true
-    }
-
-    internal func signal(_ eof: Bool) {
-        guard isActive && !isCancelled else {
-            return
-        }
-
-        if eof {
-            isCancelled = true
-        }
-        callback(eof)
-    }
-
-    deinit {
     }
 }

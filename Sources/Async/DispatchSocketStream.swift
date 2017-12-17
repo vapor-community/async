@@ -115,10 +115,10 @@ public final class DispatchSocketStream<Socket, EventLoop>: Stream, ConnectionCo
     /// Cancels reading
     public func close() {
         socket.close()
-        resumeReading()
-        resumeWriting()
-        readSource?.cancel()
-        writeSource?.cancel()
+        if EventLoop.self is DispatchEventLoop.Type {
+            resumeReading()
+            resumeWriting()
+        }
         readSource = nil
         writeSource = nil
     }

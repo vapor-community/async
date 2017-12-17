@@ -73,6 +73,20 @@ public final class SelectEventLoop: EventLoop {
     fileprivate var reading = [ReadRequest]()
     fileprivate var writing = [WriteRequest]()
 
+    public let label: String
+
+    public init(label: String) {
+        self.label = label
+        self.timeout = timeval()
+        self.timeout.tv_sec = 1
+
+        if #available(OSX 10.12, *) {
+            self.thread = Thread(block: run)
+        } else {
+            fatalError("Unsupported platform")
+        }
+    }
+
     func updateWriteFDs() {
         var active = writing.flatMap { request in
             return request.active ? request.descriptor : 0
@@ -124,21 +138,6 @@ public final class SelectEventLoop: EventLoop {
             for i in 0..<self.reading.count {
                 self.reading[i].active = state
             }
-        }
-    }
-
-    //    public static var current: EventLoop? {
-    //        return Thread.current.threadDictionary["async:eventloop"] as? EventLoop
-    //    }
-
-    init() {
-        self.timeout = timeval()
-        self.timeout.tv_sec = 1
-
-        if #available(OSX 10.12, *) {
-            self.thread = Thread(block: run)
-        } else {
-            fatalError("Unsupported platform")
         }
     }
 

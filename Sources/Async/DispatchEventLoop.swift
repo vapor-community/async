@@ -5,8 +5,12 @@ public final class DispatchEventLoop: EventLoop {
     public typealias Source = DispatchEventSource
     private let queue: DispatchQueue
 
-    public init() {
-        queue = DispatchQueue(label: "codes.vapor.async.eventLoop.dispatch")
+    public var label: String {
+        return queue.label
+    }
+
+    public init(label: String) {
+        queue = DispatchQueue(label: label)
     }
 
     public func onReadable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> DispatchEventSource {

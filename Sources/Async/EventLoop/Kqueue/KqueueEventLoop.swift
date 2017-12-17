@@ -34,16 +34,16 @@ public final class KqueueEventLoop: EventLoop {
 
         /// the maxiumum amount of events to handle per cycle
         let maxEvents = 4096
-        eventlist = .allocate(count: maxEvents)
+        eventlist = .init(start: .allocate(capacity: maxEvents), count: maxEvents)
 
         /// no descriptor should be larger than this number
         let maxDescriptor = 4096
-        readSources = .allocate(count: maxDescriptor)
-        writeSources = .allocate(count: maxDescriptor)
+        readSources = .init(start: .allocate(capacity: maxDescriptor), count: maxDescriptor)
+        writeSources = .init(start: .allocate(capacity: maxDescriptor), count: maxDescriptor)
     }
 
     /// See EventLoop.onReadable
-    public func onReadable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> KqueueEventSource {
+    public func onReadable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
         let source = KqueueEventSource(descriptor: descriptor, kq: kq, callback: callback)
         source.event.filter = Int16(EVFILT_READ)
         readSources[Int(descriptor)] = source
@@ -51,7 +51,7 @@ public final class KqueueEventLoop: EventLoop {
     }
 
     /// See EventLoop.onWritable
-    public func onWritable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> KqueueEventSource {
+    public func onWritable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
         let source = KqueueEventSource(descriptor: descriptor, kq: kq, callback: callback)
         source.event.filter = Int16(EVFILT_WRITE)
         writeSources[Int(descriptor)] = source
@@ -94,11 +94,12 @@ public final class KqueueEventLoop: EventLoop {
                 }
             }
         }
+        fatalError()
     }
 
     deinit {
-        eventlist.deallocate()
-        readSources.deallocate()
-        writeSources.deallocate()
+        eventlist.baseAddress?.deallocate(capacity: eventlist.count)
+        readSources.baseAddress?.deallocate(capacity: readSources.count)
+        writeSources.baseAddress?.deallocate(capacity: writeSources.count)
     }
 }

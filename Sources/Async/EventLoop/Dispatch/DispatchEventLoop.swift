@@ -20,23 +20,24 @@ public final class DispatchEventLoop: EventLoop {
     }
 
     /// See EventLoop.onReadable
-    public func onReadable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> DispatchEventSource {
+    public func onReadable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
         let source = DispatchSource.makeReadSource(fileDescriptor: descriptor, queue: queue)
         source.setEventHandler { callback(false) }
         source.setCancelHandler { callback(true) }
-        return .init(source: source)
+        return DispatchEventSource(source: source)
     }
 
     /// See EventLoop.onWritable
-    public func onWritable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> DispatchEventSource {
+    public func onWritable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
         let source = DispatchSource.makeWriteSource(fileDescriptor: descriptor, queue: queue)
         source.setEventHandler { callback(false) }
         source.setCancelHandler { callback(true) }
-        return .init(source: source)
+        return DispatchEventSource(source: source)
     }
 
     /// See EventLoop.run
     public func run() {
         RunLoop.main.run()
+        fatalError()
     }
 }

@@ -9,7 +9,6 @@ let package = Package(
     dependencies: [],
     targets: [
         .target(name: "Async"),
-        .target(name: "Development", dependencies: ["Async"]),
         .testTarget(name: "AsyncTests", dependencies: ["Async"]),
     ]
 )

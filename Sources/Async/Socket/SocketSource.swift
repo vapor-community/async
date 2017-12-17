@@ -1,104 +1,25 @@
 import Dispatch
 import Foundation
 
-//let size = 4096
-//let buffer = UnsafeMutableBufferPointer<UInt8>(start: .allocate(capacity: size), count: size)
-
-struct OutputBuffers {
-    let writableBuffers: UnsafeMutableBufferPointer<MutableByteBuffer>
-    let readableBuffers: UnsafeMutableBufferPointer<ByteBuffer>
-
-    var readableCount: Int
-    var readableOffset: Int
-    var writableOffset: Int
-
-    var canRead: Bool {
-        return readableCount > 0
-    }
-
-    var canWrite: Bool {
-        return readableCount < writableBuffers.count
-    }
-
-    mutating func leaseReadable() -> ByteBuffer {
-        guard canRead else {
-            fatalError()
-        }
-
-        defer {
-            readableOffset += 1
-            if readableOffset >= readableBuffers.count {
-                readableOffset = 0
-            }
-        }
-        return readableBuffers[readableOffset]
-    }
-
-    mutating func releaseReadable() {
-        guard readableCount > 0 else {
-            return
-        }
-        readableCount -= 1
-    }
-
-    mutating func nextWritable() -> MutableByteBuffer {
-        guard canWrite else {
-            fatalError()
-        }
-        return writableBuffers[writableOffset]
-    }
-
-    mutating func addReadable(_ buffer: ByteBuffer) {
-        defer {
-            writableOffset += 1
-            if writableOffset >= writableBuffers.count {
-                writableOffset = 0
-            }
-        }
-
-        readableCount += 1
-        readableBuffers[writableOffset] = buffer
-    }
-
-    init(count: Int, capacity: Int) {
-        writableBuffers = UnsafeMutableBufferPointer<MutableByteBuffer>(start: .allocate(capacity: count), count: count)
-        readableBuffers = UnsafeMutableBufferPointer<ByteBuffer>(start: .allocate(capacity: count), count: count)
-        for i in 0..<writableBuffers.count {
-            writableBuffers[i] = MutableByteBuffer(start: .allocate(capacity: capacity), count: capacity)
-        }
-        readableOffset = 0
-        writableOffset = 0
-        readableCount = 0
-    }
-
-    func cleanup() {
-        for i in 0..<writableBuffers.count {
-            writableBuffers[i].baseAddress?.deallocate(capacity: writableBuffers[i].count)
-        }
-        writableBuffers.baseAddress?.deallocate(capacity: writableBuffers.count)
-        readableBuffers.baseAddress?.deallocate(capacity: readableBuffers.count)
-    }
-}
-
 /// Data stream wrapper for a dispatch socket.
-public final class SocketSource<Socket, EventLoop>: OutputStream, ConnectionContext
-    where Socket: Async.Socket, EventLoop: Async.EventLoop
+public final class SocketSource<Socket>: OutputStream, ConnectionContext
+    where Socket: Async.Socket
 {
     /// See OutputStream.Output
-    public typealias Output = ByteBuffer
+    public typealias Output = UnsafeBufferPointer<UInt8>
 
     /// The client stream's underlying socket.
     public var socket: Socket
 
     /// Bytes from the socket are read into this buffer.
     /// Views into this buffer supplied to output streams.
-    private var buffers: OutputBuffers
+    private var buffers: SocketBuffers
 
     /// Stores read event source.
-    private var readSource: EventLoop.Source?
+    private var readSource: EventSource?
 
     /// Use a basic stream to easily implement our output stream.
-    private var downstream: AnyInputStream<ByteBuffer>?
+    private var downstream: AnyInputStream<UnsafeBufferPointer<UInt8>>?
 
     /// The amount of requested output remaining
     private var requestedOutputRemaining: UInt
@@ -109,13 +30,12 @@ public final class SocketSource<Socket, EventLoop>: OutputStream, ConnectionCont
     internal init(socket: Socket, on eventLoop: EventLoop) {
         self.socket = socket
         self.eventLoop = eventLoop
-        // Allocate one TCP packet
-        self.buffers = OutputBuffers(count: 4, capacity: 4096)
+        self.buffers = SocketBuffers(count: 4, capacity: 4096)
         self.requestedOutputRemaining = 0
     }
 
     /// See OutputStream.output
-    public func output<S>(to inputStream: S) where S: Async.InputStream, S.Input == ByteBuffer {
+    public func output<S>(to inputStream: S) where S: Async.InputStream, S.Input == UnsafeBufferPointer<UInt8> {
         /// CALLED ON ACCEPT THREAD
         downstream = AnyInputStream(inputStream)
         inputStream.connect(to: self)
@@ -215,7 +135,7 @@ public final class SocketSource<Socket, EventLoop>: OutputStream, ConnectionCont
             return
         }
 
-        let view = ByteBuffer(start: buffer.baseAddress, count: read)
+        let view = UnsafeBufferPointer<UInt8>(start: buffer.baseAddress, count: read)
         buffers.addReadable(view)
 
         if !buffers.canWrite {
@@ -227,7 +147,7 @@ public final class SocketSource<Socket, EventLoop>: OutputStream, ConnectionCont
 
     /// Returns the existing read source or creates
     /// and stores a new one
-    private func ensureReadSource() -> EventLoop.Source {
+    private func ensureReadSource() -> EventSource {
         guard let existing = self.readSource else {
             let readSource = self.eventLoop.onReadable(descriptor: socket.descriptor, readData)
             self.readSource = readSource
@@ -246,7 +166,7 @@ public final class SocketSource<Socket, EventLoop>: OutputStream, ConnectionCont
 
 extension Socket {
     /// Creates a data stream for this socket on the supplied event loop.
-    public func source<EventLoop>(on eventLoop: EventLoop) -> SocketSource<Self, EventLoop> {
+    public func source(on eventLoop: EventLoop) -> SocketSource<Self> {
         return .init(socket: self, on: eventLoop)
     }
 }

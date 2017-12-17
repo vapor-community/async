@@ -2,8 +2,8 @@ import Dispatch
 import Foundation
 
 /// Data stream wrapper for a dispatch socket.
-public final class SocketSink<Socket, EventLoop>: InputStream
-    where Socket: Async.Socket, EventLoop: Async.EventLoop
+public final class SocketSink<Socket>: InputStream
+    where Socket: Async.Socket
 {
     /// See InputStream.Input
     public typealias Input = UnsafeBufferPointer<UInt8>
@@ -12,10 +12,10 @@ public final class SocketSink<Socket, EventLoop>: InputStream
     public var socket: Socket
 
     /// Data being fed into the client stream is stored here.
-    private var inputBuffer: ByteBuffer?
+    private var inputBuffer: UnsafeBufferPointer<UInt8>?
 
     /// Stores write event source.
-    private var writeSource: EventLoop.Source?
+    private var writeSource: EventSource?
 
     /// The current request controlling incoming write data
     private var upstream: ConnectionContext?
@@ -31,7 +31,7 @@ public final class SocketSink<Socket, EventLoop>: InputStream
     }
 
     /// See InputStream.input
-    public func input(_ event: InputEvent<ByteBuffer>) {
+    public func input(_ event: InputEvent<UnsafeBufferPointer<UInt8>>) {
         switch event {
         case .next(let input):
             /// crash if the upstream is illegally overproducing data
@@ -126,7 +126,7 @@ public final class SocketSink<Socket, EventLoop>: InputStream
     }
 
     /// Creates a new WriteSource if there is no write source yet
-    private func ensureWriteSource() -> EventLoop.Source {
+    private func ensureWriteSource() -> EventSource {
         guard let existing = self.writeSource else {
             let writeSource = self.eventLoop.onWritable(descriptor: socket.descriptor, writeData)
             self.writeSource = writeSource
@@ -144,7 +144,7 @@ public final class SocketSink<Socket, EventLoop>: InputStream
 
 extension Socket {
     /// Creates a data stream for this socket on the supplied event loop.
-    public func sink<EventLoop>(on eventLoop: EventLoop) -> SocketSink<Self, EventLoop> {
+    public func sink(on eventLoop: EventLoop) -> SocketSink<Self> {
         return .init(socket: self, on: eventLoop)
     }
 }

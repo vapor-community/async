@@ -133,17 +133,18 @@ final class StreamTests : XCTestCase {
         }
 
         for loop in loops {
-            DispatchQueue.global().async {
+            let queue = DispatchQueue(label: loop.label)
+            queue.async {
                 loop.run()
             }
         }
 
-        let tcpSocket = try TCPSocket(isNonBlocking: true, shouldReuseAddress: true)
+        let tcpSocket = try TCPSocket(isNonBlocking: true, shouldReuseAddress: false)
         let tcpServer = try TCPServer(socket: tcpSocket)
         try tcpServer.start(hostname: "localhost", port: 8123, backlog: 128)
         let acceptStream = tcpServer.stream(on: accept)
 
-        var response = Data("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi".utf8)
+        var response = Data("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".utf8)
 
         acceptStream.drain { upstream in
             upstream.request(count: .max)

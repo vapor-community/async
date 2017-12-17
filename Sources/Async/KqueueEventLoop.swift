@@ -3,7 +3,7 @@ import Darwin
 public final class KqueueEventLoop: EventLoop {
     public typealias Source = KqueueEventSource
 
-    private let label: String
+    public let label: String
     private let kq: Int32
     internal var eventlist: [kevent]
     internal var sources: [KqueueEventSource]

@@ -199,7 +199,9 @@ public final class DispatchSocketStream<Socket>: Stream, ConnectionContext
                 inputBuffer = nil
                 suspendWriting()
                 upstream?.request()
-            default: print("not all data was written: \(count)/\(input.count)")
+            default:
+                // FIXME:F
+                print("not all data was written: \(count)/\(input.count)")
             }
         } catch {
             downstream?.error(error)

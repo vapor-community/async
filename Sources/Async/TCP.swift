@@ -32,7 +32,7 @@ public struct TCPSocket: DispatchSocket {
         isNonBlocking: Bool,
         shouldReuseAddress: Bool,
         address: TCPAddress?
-        ) {
+    ) {
         self.descriptor = established
         self.isNonBlocking = isNonBlocking
         self.shouldReuseAddress = shouldReuseAddress
@@ -43,7 +43,7 @@ public struct TCPSocket: DispatchSocket {
     public init(
         isNonBlocking: Bool = true,
         shouldReuseAddress: Bool = true
-        ) throws {
+    ) throws {
         let sockfd = socket(AF_INET, SOCK_STREAM, 0)
         guard sockfd > 0 else {
             throw TCPError.posix(errno, identifier: "socketCreate")
@@ -53,6 +53,14 @@ public struct TCPSocket: DispatchSocket {
             // Set the socket to async/non blocking I/O
             guard fcntl(sockfd, F_SETFL, O_NONBLOCK) == 0 else {
                 throw TCPError.posix(errno, identifier: "setNonBlocking")
+            }
+        }
+
+        if shouldReuseAddress {
+            var yes = 1
+            let intSize = socklen_t(MemoryLayout<Int>.size)
+            guard setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, &yes, intSize) == 0 else {
+                throw TCPError.posix(errno, identifier: "setReuseAddress")
             }
         }
 

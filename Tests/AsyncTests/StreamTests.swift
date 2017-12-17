@@ -124,25 +124,42 @@ final class StreamTests : XCTestCase {
 
     func testTCPStream() throws {
         // let eventLoop = DispatchEventLoop()
-        let eventLoop = try KqueueEventLoop()
-        let tcpSocket = try TCPSocket(isNonBlocking: true)
+        let accept = try KqueueEventLoop(label: "Accept Worker")
+
+        var loopOffset: Int = 0
+        var loops: [KqueueEventLoop] = []
+        for i in 0..<8 {
+            try loops.append(.init(label: "Worker \(i)"))
+        }
+
+        for loop in loops {
+            DispatchQueue.global().async {
+                loop.run()
+            }
+        }
+
+        let tcpSocket = try TCPSocket(isNonBlocking: true, shouldReuseAddress: true)
         let tcpServer = try TCPServer(socket: tcpSocket)
         try tcpServer.start(hostname: "localhost", port: 8123, backlog: 128)
-        let acceptStream = tcpServer.stream(on: eventLoop)
+        let acceptStream = tcpServer.stream(on: accept)
 
         var response = Data("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi".utf8)
 
         acceptStream.drain { upstream in
             upstream.request(count: .max)
         }.output { client in
-            let stream = client.stream(on: eventLoop)
+            loopOffset += 1
+            if loopOffset >= loops.count {
+                loopOffset = 0
+            }
+            let stream = client.stream(on: loops[loopOffset])
             var upstream: ConnectionContext?
             stream.drain { context in
                 upstream = context
                 context.request(count: 1)
             }
             .output { buffer in
-//                stream.next(buffer)
+                //                stream.next(buffer)
                 response.withUnsafeBytes { (bytes: UnsafePointer<UInt8>) in
                     let buffer = UnsafeBufferPointer<UInt8>(start: bytes, count: response.count)
                     stream.next(buffer)
@@ -159,7 +176,7 @@ final class StreamTests : XCTestCase {
             print("CLOSED")
         }
 
-        eventLoop.run()
+        accept.run()
     }
 
     static let allTests = [

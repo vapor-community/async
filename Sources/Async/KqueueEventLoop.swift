@@ -3,23 +3,20 @@ import Darwin
 public final class KqueueEventLoop: EventLoop {
     public typealias Source = KqueueEventSource
 
+    private let label: String
     private let kq: Int32
     internal var eventlist: [kevent]
     internal var sources: [KqueueEventSource]
 
-    public init() throws {
+    public init(label: String) throws {
+        self.label = label
         let status = kqueue()
         if status == -1 {
             throw EventLoopError(identifier: "kqueue", reason: "Could not create kqueue.")
         }
         self.kq = status
-        eventlist = []
+        eventlist = Array<kevent>.init(repeating: kevent(), count: 4096)
         sources = []
-
-        for _ in 0..<32 {
-            /// 32 max
-            eventlist.append(kevent())
-        }
     }
 
     public func onReadable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> KqueueEventSource {
@@ -37,12 +34,14 @@ public final class KqueueEventLoop: EventLoop {
     }
 
     public func run() {
+        print("[\(label)] Running")
         while true {
             let eventCount = kevent(kq, nil, 0, &eventlist, Int32(eventlist.count), nil)
             guard eventCount >= 0 else {
                 print("An error occured while running kevent: \(eventCount).")
                 continue
             }
+            // print("[\(label)] \(eventCount) New Events")
             for i in 0..<Int(eventCount) {
                 let event = eventlist[i]
                 for source in sources {

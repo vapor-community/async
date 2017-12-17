@@ -8,8 +8,8 @@ public final class KqueueEventLoop: EventLoop {
 
     private let kq: Int32
     private var eventlist: UnsafeMutableBufferPointer<kevent>
-    private var readSources: UnsafeMutableBufferPointer<KqueueEventSource>
-    private var writeSources: UnsafeMutableBufferPointer<KqueueEventSource>
+    private var readSources: UnsafeMutableBufferPointer<KqueueEventSource?>
+    private var writeSources: UnsafeMutableBufferPointer<KqueueEventSource?>
 
     public init(label: String) throws {
         self.label = label
@@ -46,15 +46,16 @@ public final class KqueueEventLoop: EventLoop {
                 continue
             }
             /// print("[\(label)] \(eventCount) New Events")
-            e: for i in 0..<Int(eventCount) {
+            events: for i in 0..<Int(eventCount) {
                 let event = eventlist[i]
 
+                let ident = Int(event.ident)
                 let source: KqueueEventSource
                 switch Int32(event.filter) {
                 case EVFILT_READ:
-                    source = readSources[Int(event.ident)]
+                    source = readSources[ident]!
                 case EVFILT_WRITE:
-                    source = writeSources[Int(event.ident)]
+                    source = writeSources[ident]!
                 default: fatalError()
                 }
 
@@ -63,6 +64,8 @@ public final class KqueueEventLoop: EventLoop {
                     print("An error occured during an event: \(reason)")
                 } else if event.flags & UInt16(EV_EOF) > 0 {
                     source.signal(true)
+                    readSources[ident] = nil
+                    writeSources[ident] = nil
                 } else {
                     source.signal(false)
                 }
@@ -90,13 +93,14 @@ extension UnsafeMutableBufferPointer {
 }
 
 public final class KqueueEventSource: EventSource {
-    private let callback: EventLoop.EventCallback
+    private var callback: EventLoop.EventCallback
     private var isActive: Bool
     private var isCancelled: Bool
     var event: kevent
     let kq: Int32
 
     internal init(descriptor: Int32, kq: Int32, callback: @escaping EventLoop.EventCallback) {
+        // print("\(type(of: self)).\(#function)")
         self.callback = callback
         isActive = false
         isCancelled = false

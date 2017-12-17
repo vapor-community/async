@@ -29,7 +29,7 @@ func test<EventLoop>(_ type: EventLoop.Type) throws
     try tcpServer.start(hostname: "localhost", port: 8123, backlog: 128)
     let acceptStream = tcpServer.stream(on: accept)
 
-    var response = Data("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".utf8)
+    var response = Data("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi".utf8)
     let responseBuffer = response.withUnsafeBytes { (bytes: UnsafePointer<UInt8>) in
         return UnsafeBufferPointer<UInt8>(start: bytes, count: response.count)
     }

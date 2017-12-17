@@ -6,6 +6,9 @@ enum DispatchSourceState {
     case cancelled
 }
 
+//let size = 4096
+//let buffer = UnsafeMutableBufferPointer<UInt8>(start: .allocate(capacity: size), count: size)
+
 /// Data stream wrapper for a dispatch socket.
 public final class DispatchSocketStream<Socket, EventLoop>: Stream, ConnectionContext
     where Socket: DispatchSocket, EventLoop: Async.EventLoop
@@ -42,7 +45,7 @@ public final class DispatchSocketStream<Socket, EventLoop>: Stream, ConnectionCo
     private var requestedOutputRemaining: UInt
     
     /// A strong reference to the current eventloop
-    private var eventLoop: EventLoop
+    private var eventLoop: EventLoop?
 
     /// The read dispatch source state
     private var readState: DispatchSourceState
@@ -51,10 +54,11 @@ public final class DispatchSocketStream<Socket, EventLoop>: Stream, ConnectionCo
     private var writeState: DispatchSourceState
 
     internal init(socket: Socket, on eventLoop: EventLoop) {
+        //print("\(type(of: self)).\(#function)")
         self.socket = socket
         self.eventLoop = eventLoop
         // Allocate one TCP packet
-        let size = 65_507
+        let size = 4096
         self.outputBuffer = UnsafeMutableBufferPointer<UInt8>(start: .allocate(capacity: size), count: size)
         self.inputBuffer = nil
         self.requestedOutputRemaining = 0
@@ -114,6 +118,7 @@ public final class DispatchSocketStream<Socket, EventLoop>: Stream, ConnectionCo
 
     /// Cancels reading
     public func close() {
+        // print("\(type(of: self)).\(#function)")
         socket.close()
         if EventLoop.self is DispatchEventLoop.Type {
             resumeReading()
@@ -121,6 +126,9 @@ public final class DispatchSocketStream<Socket, EventLoop>: Stream, ConnectionCo
         }
         readSource = nil
         writeSource = nil
+        eventLoop = nil
+        upstream = nil
+        downstream = nil
     }
 
     /// Resumes reading data.
@@ -251,7 +259,7 @@ public final class DispatchSocketStream<Socket, EventLoop>: Stream, ConnectionCo
     /// and stores a new one
     private func ensureReadSource() -> EventLoop.Source {
         guard let existing = self.readSource else {
-            let readSource = self.eventLoop.onReadable(descriptor: socket.descriptor, readData)
+            let readSource = self.eventLoop!.onReadable(descriptor: socket.descriptor, readData)
             self.readSource = readSource
             return readSource
         }
@@ -261,7 +269,7 @@ public final class DispatchSocketStream<Socket, EventLoop>: Stream, ConnectionCo
     /// Creates a new WriteSource if there is no write source yet
     private func ensureWriteSource() -> EventLoop.Source {
         guard let existing = self.writeSource else {
-            let writeSource = self.eventLoop.onWritable(descriptor: socket.descriptor, writeData)
+            let writeSource = self.eventLoop!.onWritable(descriptor: socket.descriptor, writeData)
             self.writeSource = writeSource
             return writeSource
         }
@@ -270,6 +278,7 @@ public final class DispatchSocketStream<Socket, EventLoop>: Stream, ConnectionCo
 
     /// Deallocated the pointer buffer
     deinit {
+        // print("\(type(of: self)).\(#function)")
         outputBuffer.baseAddress.unsafelyUnwrapped.deallocate(capacity: outputBuffer.count)
         outputBuffer.baseAddress.unsafelyUnwrapped.deinitialize()
     }

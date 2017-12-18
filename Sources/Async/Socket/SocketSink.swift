@@ -23,11 +23,16 @@ public final class SocketSink<Socket>: InputStream
     /// A strong reference to the current eventloop
     private var eventLoop: EventLoop
 
+    /// True if the socket has returned that it would block
+    /// on the previous call
+    private var socketIsFull: Bool
+
     internal init(socket: Socket, on worker: Worker) {
         self.socket = socket
         self.eventLoop = worker.eventLoop
         // Allocate one TCP packet
         self.inputBuffer = nil
+        self.socketIsFull = false
     }
 
     /// See InputStream.input
@@ -44,7 +49,11 @@ public final class SocketSink<Socket>: InputStream
         case .connect(let connection):
             /// CALLED ON ACCEPT THREAD
             upstream = connection
-            resumeWriting()
+            if socketIsFull {
+                resumeWriting()
+            } else {
+                writeData(isCancelled: false)
+            }
         case .close:
             close()
         case .error(let e):
@@ -88,6 +97,9 @@ public final class SocketSink<Socket>: InputStream
             return
         }
 
+        /// if we are called, socket must not be full
+        socketIsFull = false
+
         guard inputBuffer != nil else {
             upstream?.request()
             suspendWriting()
@@ -110,14 +122,18 @@ public final class SocketSink<Socket>: InputStream
         }
 
         do {
-            let count = try socket.write(from: input)
-            switch count {
-            case input.count:
-                // wrote everything, suspend until we get more data to write
-                inputBuffer = nil
-                suspendWriting()
-                upstream?.request()
-            default: print("not all data was written: \(count)/\(input.count)")
+            let write = try socket.write(from: input)
+            switch write {
+            case .wrote(let count):
+                switch count {
+                case input.count:
+                    // wrote everything, suspend until we get more data to write
+                    inputBuffer = nil
+                    suspendWriting()
+                    upstream?.request()
+                default: print("not all data was written: \(count)/\(input.count)")
+                }
+            case .wouldBlock: socketIsFull = true
             }
         } catch {
             /// FIXME: handle better

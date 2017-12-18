@@ -27,11 +27,16 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
     /// A strong reference to the current eventloop
     private var eventLoop: EventLoop
 
+    /// True if the socket has returned that it would block
+    /// on the previous call
+    private var socketIsEmpty: Bool
+
     internal init(socket: Socket, on worker: Worker) {
         self.socket = socket
         self.eventLoop = worker.eventLoop
         self.buffers = SocketBuffers(count: 4, capacity: 4096)
         self.requestedOutputRemaining = 0
+        self.socketIsEmpty = true
     }
 
     /// See OutputStream.output
@@ -67,7 +72,11 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
         }
 
         if buffers.canWrite {
-            resumeReading()
+            if socketIsEmpty {
+                resumeReading()
+            } else {
+                readData(isCancelled: false)
+            }
         }
     }
 
@@ -118,9 +127,12 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
             return
         }
 
+        // if we were called, socket must no longer be empty
+        socketIsEmpty = false
+
         let buffer = buffers.nextWritable()
 
-        let read: Int
+        let read: SocketReadStatus
         do {
             read = try socket.read(into: buffer)
         } catch {
@@ -130,16 +142,21 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
             return
         }
 
-        guard read > 0 else {
-            close() // used to be source.cancel
-            return
-        }
+        switch read {
+        case .read(let count):
+            guard count > 0 else {
+                close() // used to be source.cancel
+                return
+            }
 
-        let view = UnsafeBufferPointer<UInt8>(start: buffer.baseAddress, count: read)
-        buffers.addReadable(view)
+            let view = UnsafeBufferPointer<UInt8>(start: buffer.baseAddress, count: count)
+            buffers.addReadable(view)
 
-        if !buffers.canWrite {
-            suspendReading()
+            if !buffers.canWrite {
+                suspendReading()
+            }
+        case .wouldBlock:
+            socketIsEmpty = true
         }
 
         update()

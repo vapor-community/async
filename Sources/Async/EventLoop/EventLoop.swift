@@ -1,3 +1,5 @@
+import Foundation
+
 /// An event loop handles signaling completion of blocking work
 /// to create non-blocking, callback-based pipelines.
 public protocol EventLoop: Worker {
@@ -23,15 +25,31 @@ public protocol EventLoop: Worker {
     /// is ready to write data and the event source is resumed.
     func onWritable(descriptor: Int32, _ callback: @escaping EventCallback) -> EventSource
 
-    /// Runs the event loop blocking the current thread.
-    /// FIXME: @noreturn / Never (causing warnings in Xcode 9.2)
+    /// Runs a single cycle for this event loop.
+    /// Call `EventLoop.runLoop()` to run indefinitely.
     func run()
 }
 
 extension EventLoop {
+    /// Returns the current event loop.
+    public static var current: EventLoop {
+        guard let eventLoop = Thread.current.threadDictionary["eventLoop"] as? EventLoop else {
+            fatalError("Current thread is not an event loop.")
+        }
+        return eventLoop
+    }
+
     /// See Worker.eventLoop
     public var eventLoop: EventLoop {
         return self
+    }
+    /// Calls `.run` indefinitely and sets this event
+    /// loop on the current thread.
+    public func runLoop() -> Never {
+        Thread.current.threadDictionary["eventLoop"] = self
+        Thread.current.name = label
+        print("[\(label)] Booting")
+        while true { run() }
     }
 }
 

@@ -22,7 +22,7 @@ public final class DispatchEventSource: EventSource {
 
     /// See EventSource.resume
     public func resume() {
-        source.suspend()
+        source.resume()
         state = .resumed
     }
 

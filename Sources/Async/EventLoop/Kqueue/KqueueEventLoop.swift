@@ -62,41 +62,38 @@ public final class KqueueEventLoop: EventLoop {
 
     /// See EventLoop.run
     public func run() {
-        Thread.current.name = label
-        print("[\(label)] Running")
-        run: while true {
-            let eventCount = kevent(kq, nil, 0, eventlist.baseAddress, Int32(eventlist.count), nil)
-            guard eventCount >= 0 else {
-                print("An error occured while running kevent: \(eventCount).")
-                continue
-            }
-            /// print("[\(label)] \(eventCount) New Events")
-            events: for i in 0..<Int(eventCount) {
-                let event = eventlist[i]
+        let eventCount = kevent(kq, nil, 0, eventlist.baseAddress, Int32(eventlist.count), nil)
+        guard eventCount >= 0 else {
+            print("An error occured while running kevent: \(eventCount).")
+            return
+        }
 
-                let ident = Int(event.ident)
-                let source: KqueueEventSource
+        /// print("[\(label)] \(eventCount) New Events")
+        events: for i in 0..<Int(eventCount) {
+            let event = eventlist[i]
+
+            let ident = Int(event.ident)
+            let source: KqueueEventSource
+            switch Int32(event.filter) {
+            case EVFILT_READ: source = readSources[ident]!
+            case EVFILT_WRITE: source = writeSources[ident]!
+            default: fatalError()
+            }
+
+            if event.flags & UInt16(EV_ERROR) > 0 {
+                let reason = String(cString: strerror(Int32(event.data)))
+                print("An error occured during an event: \(reason)")
+            } else if event.flags & UInt16(EV_EOF) > 0 {
+                source.signal(true)
                 switch Int32(event.filter) {
-                case EVFILT_READ:
-                    source = readSources[ident]!
-                case EVFILT_WRITE:
-                    source = writeSources[ident]!
+                case EVFILT_READ: readSources[ident] = nil
+                case EVFILT_WRITE: writeSources[ident] = nil
                 default: fatalError()
                 }
-
-                if event.flags & UInt16(EV_ERROR) > 0 {
-                    let reason = String(cString: strerror(Int32(event.data)))
-                    print("An error occured during an event: \(reason)")
-                } else if event.flags & UInt16(EV_EOF) > 0 {
-                    source.signal(true)
-                    readSources[ident] = nil
-                    writeSources[ident] = nil
-                } else {
-                    source.signal(false)
-                }
+            } else {
+                source.signal(false)
             }
         }
-        fatalError()
     }
 
     deinit {

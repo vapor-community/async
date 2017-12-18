@@ -1,3 +1,5 @@
+#if os(macOS)
+
 import Darwin
 
 /// Kqueue based `EventSource` implementation.
@@ -91,3 +93,5 @@ public final class KqueueEventSource: EventSource {
         }
     }
 }
+
+#endif

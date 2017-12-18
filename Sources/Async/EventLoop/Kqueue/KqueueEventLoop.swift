@@ -1,3 +1,5 @@
+#if os(macOS)
+
 import Darwin
 import Foundation
 
@@ -103,3 +105,5 @@ public final class KqueueEventLoop: EventLoop {
         writeSources.baseAddress?.deallocate(capacity: writeSources.count)
     }
 }
+
+#endif

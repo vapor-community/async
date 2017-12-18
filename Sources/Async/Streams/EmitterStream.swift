@@ -42,8 +42,8 @@ public final class EmitterStream<Emitted>: OutputStream {
         outputs = outputs.filter { !$0.isCancelled }
         for output in outputs {
             if output.remaining > 0 {
-                output.stream.next(emitted)
                 output.remaining -= 1
+                output.stream.next(emitted)
             }
         }
     }

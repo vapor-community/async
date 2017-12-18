@@ -44,6 +44,7 @@ extension ProtocolSerializerStream {
     private func flushBacklog(and input: Input? = nil) {
         defer {
             backlog.removeFirst(consumedBacklog)
+            consumedBacklog = 0
         }
         
         func canSerialize() -> Bool {
@@ -107,8 +108,8 @@ extension ProtocolSerializerStream {
             fatalError("Incorrect serialization implementation. Don't call the `serialize` function manually")
         }
         
-        downstream?.next(value)
         downstreamDemand -= 1
+        downstream?.next(value)
     }
     
     /// updates the parser's state

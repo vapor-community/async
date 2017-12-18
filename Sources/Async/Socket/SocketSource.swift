@@ -27,9 +27,9 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
     /// A strong reference to the current eventloop
     private var eventLoop: EventLoop
 
-    internal init(socket: Socket, on eventLoop: EventLoop) {
+    internal init(socket: Socket, on worker: Worker) {
         self.socket = socket
-        self.eventLoop = eventLoop
+        self.eventLoop = worker.eventLoop
         self.buffers = SocketBuffers(count: 4, capacity: 4096)
         self.requestedOutputRemaining = 0
     }
@@ -166,7 +166,7 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
 
 extension Socket {
     /// Creates a data stream for this socket on the supplied event loop.
-    public func source(on eventLoop: EventLoop) -> SocketSource<Self> {
+    public func source(on eventLoop: Worker) -> SocketSource<Self> {
         return .init(socket: self, on: eventLoop)
     }
 }

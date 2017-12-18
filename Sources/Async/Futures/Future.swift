@@ -53,6 +53,18 @@ public final class Future<T>: FutureType {
         return result != nil
     }
 
+    /// Awaits the expectation without blocking other tasks
+    /// on the `EventLoop`.
+    public func await(on worker: Worker) throws -> Expectation {
+        while result == nil {
+            worker.eventLoop.run()
+        }
+        switch result! {
+        case .error(let error): throw error
+        case .expectation(let exp): return exp
+        }
+    }
+
     /// Completes the result, notifying awaiters.
     internal func complete(with result: Result) {
         guard self.result == nil else {

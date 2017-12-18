@@ -205,6 +205,10 @@ final class FutureTests : XCTestCase {
         XCTAssertThrowsError(try future2.blockingAwait())
     }
 
+    func testAwait() throws {
+        
+    }
+
     static let allTests = [
         ("testSimpleFuture", testSimpleFuture),
         ("testFutureThen", testFutureThen),

@@ -1,80 +1,47 @@
 /// A basic, generic stream implementation.
-public final class BasicStream<Data>: Stream, ClosableStream {
+public final class ClosureStream<Data>: Stream, ConnectionContext {
     /// See InputStream.Input
     public typealias Input = Data
 
     /// See OutputStream.Output
     public typealias Output = Data
 
-    /// A closure that takes an input.
-    public typealias OnInput = (Input) throws -> ()
+    /// Handles output stream
+    public typealias OnOutput = (AnyInputStream<Data>) -> ()
+    private let onOutput: OnOutput
 
-    /// Pass output as it is generated to this stream.
-    public var inputClosure: OnInput
+    /// Handles input stream
+    public typealias OnInput = (InputEvent<Data>) -> ()
+    private let onInput: OnInput
 
-    /// A closure that takes an error.
-    public typealias OnError = (Error) -> ()
-
-    /// Pass output as it is generated to this stream.
-    public var errorClosure: OnError
-
-    /// A closure for handling on close events
-    public typealias OnClose = () -> ()
-
-    /// See CloseableStream.close
-    public var closeClosure: OnClose
-
-    /// See InputStream.onInput
-    public func onInput(_ input: Data) {
-        do {
-            try self.inputClosure(input)
-        } catch {
-            self.onError(error)
-        }
-    }
-
-    /// See InputStream.onError
-    public func onError(_ error: Error) {
-        errorClosure(error)
-    }
-
-    /// See OutputStream.onOutput
-    public func onOutput<I>(_ input: I) where I: InputStream, Data == I.Input {
-        inputClosure = input.onInput
-        errorClosure = input.onError
-    }
-
-    /// See CloseableStream.onClose(_:)
-    public func onClose(_ onClose: ClosableStream) {
-        closeClosure = onClose.close
-    }
-
-    /// See CloseableStream.close
-    public func close() {
-        closeClosure()
-        
-        // Unset all closures, releasing captured contexts
-        self.inputClosure = { _ in }
-        self.errorClosure = { _ in }
-        self.closeClosure = { }
-    }
+    /// Handles connection context
+    public typealias OnConnection = (ConnectionEvent) -> ()
+    private let onConnection: OnConnection
 
     /// Create a new BasicStream generic on the supplied type.
     public init(
-        _ data: Data.Type = Data.self,
-        onInput: @escaping OnInput = { _ in },
-        onError: @escaping OnError = { _ in },
-        onClose: @escaping OnClose = { }
+        onInput: @escaping OnInput,
+        onOutput: @escaping OnOutput,
+        onConnection: @escaping OnConnection
     ) {
-        self.inputClosure = onInput
-        self.errorClosure = onError
-        self.closeClosure = onClose
+        self.onInput = onInput
+        self.onOutput = onOutput
+        self.onConnection = onConnection
     }
 
-    @discardableResult
-    /// Sets this stream's error clsoure
-    public func `catch`(onError: @escaping OnError) -> Self {
-        self.errorClosure = onError
-        return self
+    /// See InputStream.input
+    public func input(_ event: InputEvent<Data>) {
+        onInput(event)
+    }
+
+    /// See OutputStream.output
+    public func output<S>(to inputStream: S) where S : InputStream, Data == S.Input {
+        let wrapped = AnyInputStream(inputStream)
+        onOutput(wrapped)
+    }
+
+    /// See ConnectionContext.connection
+    public func connection(_ event: ConnectionEvent) {
+        onConnection(event)
     }
 }

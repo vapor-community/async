@@ -35,6 +35,11 @@ public final class DispatchEventLoop: EventLoop {
         return DispatchEventSource(source: source)
     }
 
+    /// See EventLoop.async
+    public func async(_ callback: @escaping EventLoop.AsyncCallback) {
+        queue.async { callback() }
+    }
+
     /// See EventLoop.run
     public func run() {
         /// FIXME: this run is a `-> Never` which will

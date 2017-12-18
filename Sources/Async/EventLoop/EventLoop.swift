@@ -9,6 +9,9 @@ public protocol EventLoop: Worker {
     /// be called again.
     typealias EventCallback = (Bool) -> ()
 
+    /// An async callback.
+    typealias AsyncCallback = () -> ()
+
     /// This event loop's label.
     var label: String { get }
 
@@ -24,6 +27,9 @@ public protocol EventLoop: Worker {
     /// This callback will be called whenever the descriptor
     /// is ready to write data and the event source is resumed.
     func onWritable(descriptor: Int32, _ callback: @escaping EventCallback) -> EventSource
+
+    /// Sets the closure to be run async.
+    func async(_ callback: @escaping AsyncCallback)
 
     /// Runs a single cycle for this event loop.
     /// Call `EventLoop.runLoop()` to run indefinitely.

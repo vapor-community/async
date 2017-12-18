@@ -25,6 +25,9 @@ public final class KqueueEventLoop: EventLoop {
     /// Write source buffer.
     private var writeSources: UnsafeMutableBufferPointer<KqueueEventSource?>
 
+    /// Async tasks to run
+    private var tasks: [AsyncCallback]
+
     /// Create a new `KqueueEventLoop`
     public init(label: String) throws {
         self.label = label
@@ -42,6 +45,8 @@ public final class KqueueEventLoop: EventLoop {
         let maxDescriptor = 4096
         readSources = .init(start: .allocate(capacity: maxDescriptor), count: maxDescriptor)
         writeSources = .init(start: .allocate(capacity: maxDescriptor), count: maxDescriptor)
+
+        tasks = []
     }
 
     /// See EventLoop.onReadable
@@ -60,9 +65,28 @@ public final class KqueueEventLoop: EventLoop {
         return source
     }
 
+    /// See EventLoop.async
+    public func async(_ callback: @escaping EventLoop.AsyncCallback) {
+        tasks.append(callback)
+    }
+
     /// See EventLoop.run
     public func run() {
-        let eventCount = kevent(kq, nil, 0, eventlist.baseAddress, Int32(eventlist.count), nil)
+        // run all async tasks
+        if self.tasks.count > 0 {
+            let tasks = self.tasks
+            self.tasks = []
+            for task in tasks {
+                task()
+            }
+        }
+
+        var timeout = timespec()
+        timeout.tv_sec = 0
+        timeout.tv_nsec = 100_000_000 // 0.1 seconds
+
+        // check for new events
+        let eventCount = kevent(kq, nil, 0, eventlist.baseAddress, Int32(eventlist.count), &timeout)
         guard eventCount >= 0 else {
             print("An error occured while running kevent: \(eventCount).")
             return

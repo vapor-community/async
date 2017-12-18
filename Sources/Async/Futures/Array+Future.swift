@@ -107,7 +107,8 @@ extension Array where Element == Signal {
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/advanced-futures/#combining-multiple-futures)
     public func flatten() -> Signal {
-        return self.flatten().map(to: Void.self) { _ in return }
+        let flatten: Future<[Void]> = self.flatten()
+        return flatten.map(to: Void.self) { _ in return }
     }
 }
 

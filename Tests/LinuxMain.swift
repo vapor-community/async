@@ -6,6 +6,7 @@ import XCTest
 XCTMain([
     testCase(FutureTests.allTests),
     testCase(StreamTests.allTests),
+    testCase(FileTests.allTests),
 ])
 
 #endif

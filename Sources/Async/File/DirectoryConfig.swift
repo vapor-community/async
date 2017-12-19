@@ -1,7 +1,7 @@
-#if os(macOS)
-    import Darwin
+#if os(Linux)
+    import Glibc
 #else
-    import Glib.C
+    import Darwin.C
 #endif
 
 /// Contains a configured working directory.

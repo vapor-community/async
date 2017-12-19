@@ -44,6 +44,8 @@ public final class DispatchEventLoop: EventLoop {
     public func run() {
         /// FIXME: this run is a `-> Never` which will
         /// only work correctly if `run()` or `runLoop()` is called only once.
-        RunLoop.main.run()
+        while true {
+            sleep(.max)
+        }
     }
 }

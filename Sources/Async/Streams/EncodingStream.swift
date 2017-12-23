@@ -4,12 +4,12 @@ public protocol StreamEncoder: class {
     func encodeStream<O: OutputStream & ConnectionContext>(_ stream: O) throws where O.Output == Encodable
 }
 
-public final class EncodingStream: TransformingStream, ConnectionContext, Encodable {
+public final class EncodableStream: TransformingStream, ConnectionContext, Encodable {
     public typealias Input = Encodable
     public typealias Output = Encodable
     
     public var upstream: ConnectionContext?
-    public var downstream: AnyInputStream<EncodingStream.Output>?
+    public var downstream: AnyInputStream<Output>?
     
     init<S: OutputStream>(_ stream: S) where S.Output == Output {
         stream.output(to: self)
@@ -40,13 +40,13 @@ public final class EncodingStream: TransformingStream, ConnectionContext, Encoda
 }
 
 extension OutputStream where Output == Encodable {
-    public func encode() -> EncodingStream {
-        return EncodingStream(self)
+    public func encode() -> EncodableStream {
+        return EncodableStream(self)
     }
 }
 
 extension OutputStream where Output: Encodable {
-    public func encode() -> EncodingStream {
-        return EncodingStream(self)
+    public func encode() -> EncodableStream {
+        return EncodableStream(self)
     }
 }

@@ -25,10 +25,10 @@ extension FileReader {
         
         stream.drain { _upstream in
             upstream = _upstream
-        }.output { upstream, buffer in
+        }.output { buffer in
             let extraData = Data(bytes: buffer.baseAddress!, count: buffer.count)
             data.append(extraData)
-            upstream.request()
+            upstream?.request()
         }.catch(onError: promise.fail).finally {
             promise.complete(data)
         }

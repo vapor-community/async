@@ -5,8 +5,7 @@ import Foundation
 public protocol FileReader {
     /// Reads the file at the supplied path
     /// Supply a queue to complete the future on.
-    func read<S>(at path: String, into stream: S, chunkSize: Int)
-        where S: Async.InputStream, S.Input == UnsafeBufferPointer<UInt8>
+    func read(at path: String, chunkSize: Int) -> AnyOutputStream<UnsafeBufferPointer<UInt8>>
 
     /// Returns true if the file exists at the supplied path.
     func fileExists(at path: String) -> Bool
@@ -21,27 +20,22 @@ extension FileReader {
         let promise = Promise(Data.self)
 
         var data = Data()
-        let stream = ClosureStream<UnsafeBufferPointer<UInt8>>.init(
-            onInput: { event in
-                switch event {
-                case .next(let input): data.append(contentsOf: input)
-                case .error(let e): promise.fail(e)
-                case .connect(let upstream): upstream.request(count: .max)
-                case .close: promise.complete(data)
-                }
-            },
-            onOutput: { _ in }, // not used as an output stream
-            onConnection: { _ in } // not used as a connection context
-        )
-        self.read(at: path, into: stream, chunkSize: chunkSize)
+        let stream = self.read(at: path, chunkSize: chunkSize)
+        var upstream: ConnectionContext?
+        
+        stream.drain { _upstream in
+            upstream = _upstream
+        }.output { buffer in
+            let extraData = Data(bytes: buffer.baseAddress!, count: buffer.count)
+            data.append(extraData)
+            upstream?.request()
+        }.catch(onError: promise.fail).finally {
+            promise.complete(data)
+        }
+        
+        upstream?.request()
+        
         return promise.future
-    }
-
-    /// Reads data at the supplied path into a FileOutputStream.
-    public func read(at path: String, chunkSize: Int) -> FileOutputStream {
-        let stream = ConnectingStream<UnsafeBufferPointer<UInt8>>()
-        defer { read(at: path, into: stream, chunkSize: chunkSize) }
-        return .init(stream)
     }
 }
 

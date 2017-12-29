@@ -41,7 +41,8 @@ public final class DrainStream<Draining>: InputStream {
     /// See InputStream.onInput
     public func input(_ event: InputEvent<Draining>) {
         switch event {
-        case .connect(let event): onConnectClosure?(event)
+        case .connect(let event):
+            onConnectClosure?(event)
         case .next(let input): do { try onInputClosure?(input) } catch { onErrorClosure?(error) }
         case .error(let error): onErrorClosure?(error)
         case .close: onCloseClosure?()

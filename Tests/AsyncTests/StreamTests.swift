@@ -91,6 +91,10 @@ final class StreamTests : XCTestCase {
         XCTAssertEqual(results, [1, 2])
         XCTAssert(reported)
     }
+    
+    func testMapError() throws {
+        
+    }
 
     func testCloseChaining() throws {
         let numberEmitter = EmitterStream(Int.self)

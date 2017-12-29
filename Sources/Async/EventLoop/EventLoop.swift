@@ -1,5 +1,13 @@
 import Foundation
 
+#if os(Linux)
+    public typealias DefaultEventLoop = EpollEventLoop
+#endif
+
+#if os(macOS)
+    public typealias DefaultEventLoop = KqueueEventLoop
+#endif
+
 /// An event loop handles signaling completion of blocking work
 /// to create non-blocking, callback-based pipelines.
 public protocol EventLoop: Worker {

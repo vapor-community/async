@@ -3,7 +3,7 @@ import Async
 
 final class EventLoopTests : XCTestCase {
     func testAsync() throws {
-        let loop = try KqueueEventLoop(label: "codes.vapor.async.test.async")
+        let loop = try DefaultEventLoop(label: "codes.vapor.async.test.async")
         var nums: [Int] = []
 
         func recurse(depth: Int = 0) {

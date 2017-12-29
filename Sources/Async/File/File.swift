@@ -39,6 +39,7 @@ fileprivate final class SingleFile: Async.OutputStream, ConnectionContext {
             self.downstream?.close()
         case .request(_):
             guard !closed else { return }
+            closed = true
             
             if let data = FileManager.default.contents(atPath: path) {
                 self.data = data
@@ -55,7 +56,6 @@ fileprivate final class SingleFile: Async.OutputStream, ConnectionContext {
                 downstream?.error(FileError(identifier: "file-not-found", reason: "The file '\(path)' was not found"))
             }
             
-            closed = true
             downstream?.close()
         }
     }

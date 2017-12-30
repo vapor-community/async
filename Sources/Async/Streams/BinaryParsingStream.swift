@@ -33,7 +33,7 @@ public protocol BinaryParsingStream: Async.Stream, ConnectionContext where Input
 }
 
 public enum ParsingState<Output> {
-    case uncompleted(consuming: Int)
+    case uncompleted
     case completed(consuming: Int, result: Output)
 }
 
@@ -102,14 +102,6 @@ extension BinaryParsingStream {
         parseInput()
     }
     
-    private func consume(_ consumed: Int) {
-        self.parsedInput = self.parsedInput &+ consumed
-        
-        if parsedInput == upstreamInput?.count {
-            setInput(to: nil)
-        }
-    }
-    
     private func parseInput() {
         guard downstreamDemand > 0 else { return }
         
@@ -130,15 +122,22 @@ extension BinaryParsingStream {
             }
             
             switch state {
-            case .uncompleted(let consumed):
-                consume(consumed)
-            case .completed(let consumed, let result):
-                consume(consumed)
-                downstream?.next(result)
-            }
-            
-            if self.upstreamInput == nil {
+            case .uncompleted:
+                // All data is drained, we need to provide more data after this
+                setInput(to: nil)
                 upstream?.request()
+            case .completed(let consumed, let result):
+                self.parsedInput = self.parsedInput &+ consumed
+                
+                if parsedInput == upstreamInput?.count {
+                    setInput(to: nil)
+                }
+                
+                downstream?.next(result)
+                
+                if self.upstreamInput == nil {
+                    upstream?.request()
+                }
             }
         } catch {
             downstream?.error(error)

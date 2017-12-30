@@ -5,8 +5,8 @@ public protocol TranslatingStream {
 }
 
 extension TranslatingStream {
-    public func stream() -> TranslatingStreamWrapper<Self> {
-        return .init(translator: self)
+    public func stream(on worker: Worker) -> TranslatingStreamWrapper<Self> {
+        return .init(translator: self, on: worker)
     }
 }
 
@@ -21,9 +21,11 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
     private var input: Input?
     private var demand: UInt
     private var translator: Translator
+    private var eventLoop: EventLoop
 
-    init(translator: Translator) {
+    init(translator: Translator, on worker: Worker) {
         self.translator = translator
+        self.eventLoop = worker.eventLoop
         demand = 0
     }
 

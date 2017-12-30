@@ -130,16 +130,22 @@ public final class SocketSink<Socket>: InputStream
         }
 
         do {
-            let write = try socket.write(from: input)
+            let buffer = UnsafeBufferPointer<UInt8>(
+                start: input.baseAddress?.advanced(by: written),
+                count: input.count - written
+            )
+            
+            let write = try socket.write(from: buffer)
             switch write {
             case .wrote(let count):
-                switch count {
+                switch count + written {
                 case input.count:
                     // wrote everything, suspend until we get more data to write
                     inputBuffer = nil
                     suspendWriting()
                     upstream?.request()
-                default: print("not all data was written: \(count)/\(input.count)")
+                default:
+                    written += count
                 }
             case .wouldBlock: socketIsFull = true
             }

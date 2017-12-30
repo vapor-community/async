@@ -1,41 +1,30 @@
-public protocol TranslatingStream: Stream, ConnectionContext {
-    var upstream: ConnectionContext? { get set }
-    var downstream: AnyInputStream<Output>? { get set }
-    var input: Input? { get set }
-    var demand: UInt { get set }
+public protocol TranslatingStream {
+    associatedtype Input
+    associatedtype Output
     func translate(input: Input) -> TranslatingStreamResult<Output>
 }
 
-public enum TranslatingStreamResult<Output> {
-    case insufficient
-    case sufficient(Output)
-    case excess(Output)
+extension TranslatingStream {
+    public func stream() -> TranslatingStreamWrapper<Self> {
+        return .init(translator: self)
+    }
 }
 
-extension TranslatingStream {
-    public func update() {
-        guard demand > 0 else {
-            return
-        }
+public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionContext
+    where Translator: TranslatingStream
+{
+    public typealias Input = Translator.Input
+    public typealias Output = Translator.Output
 
-        guard let input = self.input else {
-            upstream?.request()
-            return
-        }
+    private var upstream: ConnectionContext?
+    private var downstream: AnyInputStream<Output>?
+    private var input: Input?
+    private var demand: UInt
+    private var translator: Translator
 
-        switch translate(input: input) {
-        case .insufficient:
-            self.input = nil
-        case .sufficient(let output):
-            self.input = nil
-            downstream?.next(output)
-            demand -= 1
-        case .excess(let output):
-            downstream?.next(output)
-            demand -= 1
-        }
-
-        update()
+    init(translator: Translator) {
+        self.translator = translator
+        demand = 0
     }
 
     public func input(_ event: InputEvent<Input>) {
@@ -70,6 +59,37 @@ extension TranslatingStream {
         downstream = AnyInputStream(inputStream)
         inputStream.connect(to: self)
     }
+
+    private func update() {
+        guard demand > 0 else {
+            return
+        }
+
+        guard let input = self.input else {
+            upstream?.request()
+            return
+        }
+
+        switch translator.translate(input: input) {
+        case .insufficient:
+            self.input = nil
+        case .sufficient(let output):
+            self.input = nil
+            downstream?.next(output)
+            demand -= 1
+        case .excess(let output):
+            downstream?.next(output)
+            demand -= 1
+        }
+
+        update()
+    }
+}
+
+public enum TranslatingStreamResult<Output> {
+    case insufficient
+    case sufficient(Output)
+    case excess(Output)
 }
 
 public enum WordParsingStreamState {
@@ -78,19 +98,10 @@ public enum WordParsingStreamState {
 }
 
 public final class WordParsingStream: TranslatingStream {
-    public typealias Input = String
-    public typealias Output = String
-
-    public var upstream: ConnectionContext?
-    public var downstream: AnyInputStream<String>?
-    public var demand: UInt
-    public var input: String?
-    
     public var state: WordParsingStreamState
 
     public init() {
         state = .partial("")
-        demand = 0
     }
 
     public func translate(input: String) -> TranslatingStreamResult<String> {

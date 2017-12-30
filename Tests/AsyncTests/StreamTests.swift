@@ -125,7 +125,7 @@ final class StreamTests : XCTestCase {
     func testTranslatingStream() throws {
         let stringEmitter = EmitterStream(String.self)
 
-        let wordParser = WordParsingStream()
+        let wordParser = WordParsingStream().stream()
         stringEmitter.output(to: wordParser)
 
         var upstream: ConnectionContext?
@@ -148,8 +148,9 @@ final class StreamTests : XCTestCase {
 
         XCTAssertEqual(words.count, 0)
         stringEmitter.emit("hello world")
-        XCTAssertEqual(words.count, 1)
+        XCTAssertEqual(words.count, 2)
         XCTAssertEqual(words.first, "hello")
+        XCTAssertEqual(words.last, "world")
 
     }
 

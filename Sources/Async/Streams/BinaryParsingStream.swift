@@ -1,39 +1,47 @@
 public protocol BinaryParsingStream: Async.Stream, ConnectionContext where Input == UnsafeBufferPointer<UInt8> {
-    associatedtype PartiallyParsed
-    
-    /// The upstream that is providing byte buffers
-    var upstream: ConnectionContext? { get set }
-    
-    /// The currently parsing buffer
-    var upstreamInput: UnsafeBufferPointer<UInt8>? { get set }
-    
-    /// The current offset where is being parsed
-    var parsedInput: Int { get set }
+    associatedtype Partial
     
     /// The current eventloop, used to dispatch tasks (preventing stack overflows)
     var eventloop: EventLoop { get }
     
-    /// Remaining downstream demand
-    var downstreamDemand: UInt { get set }
-    
-    /// Indicates that the stream is currently parsing, preventing multiple actions from being dispatched
-    var parsing: Bool { get set }
-    
-    /// Stores partially parsed data
-    var partiallyParsed: PartiallyParsed? { get set }
-    
-    /// Use a basic output stream to implement server output stream.
-    var downstream: AnyInputStream<Output>? { get set }
-    
     /// Closes the stream on protocol errors
     var closeOnError: Bool { get }
     
-    func continueParsing(_ partial: PartiallyParsed, from buffer: Input) throws -> ParsingState<Output>
-    func startParsing(from buffer: Input) throws -> ParsingState<Output>
+    func continueParsing(_ partial: Partial, from buffer: Input) throws -> ParsingState<Partial, Output>
+    func startParsing(from buffer: Input) throws -> ParsingState<Partial, Output>
 }
 
-public enum ParsingState<Output> {
-    case uncompleted
+public final class BinaryParsingStreamState<S: BinaryParsingStream> {
+    /// The upstream that is providing byte buffers
+    fileprivate var upstream: ConnectionContext?
+    
+    /// The currently parsing buffer
+    fileprivate var upstreamInput: UnsafeBufferPointer<UInt8>?
+    
+    /// The current offset where is being parsed
+    fileprivate var parsedInput: Int
+    
+    /// Remaining downstream demand
+    fileprivate var downstreamDemand: UInt
+    
+    /// Indicates that the stream is currently parsing, preventing multiple actions from being dispatched
+    fileprivate var parsing: Bool
+    
+    /// Stores partially parsed data
+    fileprivate var partiallyParsed: S.Partial?
+    
+    /// Use a basic output stream to implement server output stream.
+    fileprivate var downstream: AnyInputStream<S.Output>?
+    
+    public init() {
+        parsedInput = 0
+        downstreamDemand = 0
+        parsing = false
+    }
+}
+
+public enum ParsingState<Partial, Output> {
+    case uncompleted(Partial)
     case completed(consuming: Int, result: Output)
 }
 
@@ -110,10 +118,10 @@ extension BinaryParsingStream {
             return
         }
         
-        //        if eventloop.recursion > eventloop.maxRecursion {
+        // TODO: if eventloop.recursion > eventloop.maxRecursion {
         
         do {
-            let state: ParsingState<Output>
+            let state: ParsingState<Partial, Output>
             
             if let partiallyParsed = self.partiallyParsed {
                 state = try continueParsing(partiallyParsed, from: unconsumedBuffer)

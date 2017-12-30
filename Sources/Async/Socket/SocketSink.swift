@@ -12,8 +12,15 @@ public final class SocketSink<Socket>: InputStream
     public var socket: Socket
 
     /// Data being fed into the client stream is stored here.
-    private var inputBuffer: UnsafeBufferPointer<UInt8>?
-
+    private var inputBuffer: UnsafeBufferPointer<UInt8>? {
+        didSet {
+            written = 0
+        }
+    }
+    
+    /// The amount of bytes already written from the `inputBuffer`
+    private var written: Int
+    
     /// Stores write event source.
     private var writeSource: EventSource?
 
@@ -33,6 +40,7 @@ public final class SocketSink<Socket>: InputStream
         // Allocate one TCP packet
         self.inputBuffer = nil
         self.socketIsFull = false
+        self.written = 0
     }
 
     /// See InputStream.input
@@ -164,5 +172,3 @@ extension Socket {
         return .init(socket: self, on: eventLoop)
     }
 }
-
-

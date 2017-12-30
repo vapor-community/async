@@ -3,6 +3,12 @@
 import Glibc
 import CEpoll
 
+internal enum EpollEventSourceType {
+    case read
+    case write
+    case timer(timeout: Int)
+}
+
 public final class EpollEventSource: EventSource {
     /// See EventSource.state
     public var state: EventSourceState
@@ -17,13 +23,23 @@ public final class EpollEventSource: EventSource {
     private var callback: EventLoop.EventCallback
 
     /// Create a new `EpollEventSource` for the supplied descriptor.
-    internal init(descriptor: Int32, epfd: Int32, callback: @escaping EventLoop.EventCallback) {
+    internal init(
+        descriptor: Int32,
+        epfd: Int32,
+        type: EpollEventSourceType,
+        callback: @escaping EventLoop.EventCallback
+    ) {
         self.callback = callback
         state = .suspended
         self.epfd = epfd
         var event = epoll_event()
         event.data.fd = descriptor
         event.events = EPOLLET.rawValue
+//        switch type {
+//        case .read:
+//        case .write:
+//        case .timer(let timeout):
+//        }
         self.event = event
     }
 

@@ -16,12 +16,6 @@ public final class KqueueEventLoop: EventLoop {
     /// additional signals.
     private var eventlist: UnsafeMutableBufferPointer<kevent>
 
-    /// Read source buffer.
-    private var readSources: UnsafeMutableBufferPointer<KqueueEventSource?>
-
-    /// Write source buffer.
-    private var writeSources: UnsafeMutableBufferPointer<KqueueEventSource?>
-
     /// Async task to run
     private var task: AsyncCallback?
 
@@ -38,27 +32,24 @@ public final class KqueueEventLoop: EventLoop {
         let maxEvents = 4096
         eventlist = .init(start: .allocate(capacity: maxEvents), count: maxEvents)
 
-        /// no descriptor should be larger than this number
-        let maxDescriptor = 4096
-        readSources = .init(start: .allocate(capacity: maxDescriptor), count: maxDescriptor)
-        writeSources = .init(start: .allocate(capacity: maxDescriptor), count: maxDescriptor)
+        /// set async task to nil
         task = nil
     }
 
     /// See EventLoop.onReadable
     public func onReadable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
-        let source = KqueueEventSource(descriptor: descriptor, kq: kq, callback: callback)
-        source.event.filter = Int16(EVFILT_READ)
-        readSources[Int(descriptor)] = source
-        return source
+        return KqueueEventSource(descriptor: descriptor, kq: kq, type: .read, callback: callback)
     }
 
     /// See EventLoop.onWritable
     public func onWritable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
-        let source = KqueueEventSource(descriptor: descriptor, kq: kq, callback: callback)
-        source.event.filter = Int16(EVFILT_WRITE)
-        writeSources[Int(descriptor)] = source
-        return source
+        return KqueueEventSource(descriptor: descriptor, kq: kq, type: .write, callback: callback)
+    }
+
+
+    /// See EventLoop.ononTimeout
+    public func onTimeout(timeout: Int, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
+        return KqueueEventSource(descriptor: 1, kq: kq, type: .timer(timeout: timeout), callback: callback)
     }
 
     /// See EventLoop.async
@@ -86,50 +77,35 @@ public final class KqueueEventLoop: EventLoop {
             task()
         }
 
-        /// 0.1 second timeout
-//        var timeout = timespec()
-//        timeout.tv_sec = 1 // 1 second timeout
-//        timeout.tv_nsec = 0
-
         // check for new events
         let eventCount = kevent(kq, nil, 0, eventlist.baseAddress, Int32(eventlist.count), nil)
         guard eventCount >= 0 else {
-            print("An error occured while running kevent: \(eventCount).")
-            return
+            switch errno {
+            case EINTR:
+                run() // run again
+                return
+            default:
+                let reason = String(cString: strerror(Int32(errno)))
+                print("An error occured while running kevent: \(reason).")
+                return
+            }
         }
 
-        /// print("[\(label)] \(eventCount) New Events")
+        print("[\(label)] \(eventCount) New Events")
         events: for i in 0..<Int(eventCount) {
             let event = eventlist[i]
-
-            let ident = Int(event.ident)
-            let source: KqueueEventSource
-            switch Int32(event.filter) {
-            case EVFILT_READ: source = readSources[ident]!
-            case EVFILT_WRITE: source = writeSources[ident]!
-            default: fatalError()
-            }
-
+            let source = event.udata.assumingMemoryBound(to: KqueueEventSource.self).pointee
             if event.flags & UInt16(EV_ERROR) > 0 {
                 let reason = String(cString: strerror(Int32(event.data)))
                 print("An error occured during an event: \(reason)")
-            } else if event.flags & UInt16(EV_EOF) > 0 {
-                source.signal(true)
-                switch Int32(event.filter) {
-                case EVFILT_READ: readSources[ident] = nil
-                case EVFILT_WRITE: writeSources[ident] = nil
-                default: fatalError()
-                }
             } else {
-                source.signal(false)
+                source.signal(event.flags & UInt16(EV_EOF) > 0)
             }
         }
     }
 
     deinit {
         eventlist.baseAddress?.deallocate(capacity: eventlist.count)
-        readSources.baseAddress?.deallocate(capacity: readSources.count)
-        writeSources.baseAddress?.deallocate(capacity: writeSources.count)
     }
 }
 

@@ -36,6 +36,10 @@ public protocol EventLoop: Worker {
     /// is ready to write data and the event source is resumed.
     func onWritable(descriptor: Int32, _ callback: @escaping EventCallback) -> EventSource
 
+    /// Creates a new timer event source.
+    /// This callback will be called perodically when the timeout is reached.
+    func onTimeout(timeout: Int, _ callback: @escaping EventLoop.EventCallback) -> EventSource
+
     /// Sets the closure to be run async.
     func async(_ callback: @escaping AsyncCallback)
 

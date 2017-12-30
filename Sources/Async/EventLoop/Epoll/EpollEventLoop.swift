@@ -19,12 +19,6 @@ public final class EpollEventLoop: EventLoop {
     /// additional signals.
     private var eventlist: UnsafeMutableBufferPointer<epoll_event>
 
-    /// Read source buffer.
-    private var readSources: UnsafeMutableBufferPointer<EpollEventSource?>
-
-    /// Write source buffer.
-    private var writeSources: UnsafeMutableBufferPointer<EpollEventSource?>
-
     /// Create a new `EpollEventLoop`
     public init(label: String) throws {
         self.label = label
@@ -38,10 +32,7 @@ public final class EpollEventLoop: EventLoop {
         let maxEvents = 4096
         eventlist = .init(start: .allocate(capacity: maxEvents), count: maxEvents)
 
-        /// no descriptor should be larger than this number
-        let maxDescriptor = 4096
-        readSources = .init(start: .allocate(capacity: maxDescriptor), count: maxDescriptor)
-        writeSources = .init(start: .allocate(capacity: maxDescriptor), count: maxDescriptor)
+        /// set current task to nil
         task = nil
     }
 
@@ -49,7 +40,6 @@ public final class EpollEventLoop: EventLoop {
     public func onReadable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
         let source = EpollEventSource(descriptor: descriptor, epfd: epfd, callback: callback)
         source.event.events = EPOLLIN.rawValue
-        readSources[Int(descriptor)] = source
         return source
     }
 
@@ -57,8 +47,12 @@ public final class EpollEventLoop: EventLoop {
     public func onWritable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
         let source = EpollEventSource(descriptor: descriptor, epfd: epfd, callback: callback)
         source.event.events = EPOLLOUT.rawValue
-        writeSources[Int(descriptor)] = source
         return source
+    }
+
+    /// See EventLoop.ononTimeout
+    public func onTimeout(timeout: Int, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
+        return KqueueEventSource(descriptor: 1, kq: kq, type: .timer(timeout: timeout), callback: callback)
     }
 
     /// See EventLoop.async

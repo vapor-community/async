@@ -1,15 +1,7 @@
 {
   "object": {
     "pins": [
-      {
-        "package": "CEpoll",
-        "repositoryURL": "https://github.com/IBM-Swift/CEpoll.git",
-        "state": {
-          "branch": null,
-          "revision": "7b65f0adfe5a1f36fc16b16760f5f99cfd3a4e1a",
-          "version": "0.1.1"
-        }
-      }
+
     ]
   },
   "version": 1

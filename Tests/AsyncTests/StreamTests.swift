@@ -122,6 +122,37 @@ final class StreamTests : XCTestCase {
         XCTAssert(closed)
     }
 
+    func testTranslatingStream() throws {
+        let stringEmitter = EmitterStream(String.self)
+
+        let wordParser = WordParsingStream()
+        stringEmitter.output(to: wordParser)
+
+        var upstream: ConnectionContext?
+
+        var words: [String] = []
+
+        wordParser.drain { req in
+            upstream = req
+        }.output { word in 
+            words.append(word)
+            print(word)
+            upstream?.request()
+        }.catch { error in
+            XCTFail("\(error)")
+        }.finally {
+            print("closed")
+        }
+
+        upstream?.request()
+
+        XCTAssertEqual(words.count, 0)
+        stringEmitter.emit("hello world")
+        XCTAssertEqual(words.count, 1)
+        XCTAssertEqual(words.first, "hello")
+
+    }
+
     static let allTests = [
         ("testPipeline", testPipeline),
         ("testDelta", testDelta),

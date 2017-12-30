@@ -4,6 +4,8 @@ public protocol BinaryParsingStream: Async.Stream, ConnectionContext where Input
     /// The current eventloop, used to dispatch tasks (preventing stack overflows)
     var eventloop: EventLoop { get }
     
+    var state: BinaryParsingStreamState<Self> { get }
+    
     /// Closes the stream on protocol errors
     var closeOnError: Bool { get }
     
@@ -48,21 +50,21 @@ public enum ParsingState<Partial, Output> {
 extension BinaryParsingStream {
     /// Must not be called before input
     /// The remaining length after `basePointer`
-    public var remainder: Int? {
-        guard let count = upstreamInput?.count else {
+    var remainder: Int? {
+        guard let count = state.upstreamInput?.count else {
             return nil
         }
         
-        return count - parsedInput
+        return count - state.parsedInput
     }
     
     /// The current position where is being parsed
-    public var basePointer: UnsafePointer<UInt8>? {
-        return upstreamInput?.baseAddress?.advanced(by: parsedInput)
+    var basePointer: UnsafePointer<UInt8>? {
+        return state.upstreamInput?.baseAddress?.advanced(by: state.parsedInput)
     }
     
     /// The unconsumed data
-    public var unconsumedBuffer: UnsafeBufferPointer<UInt8>? {
+    var unconsumedBuffer: UnsafeBufferPointer<UInt8>? {
         guard let remainder = self.remainder, let pointer = self.basePointer else {
             return nil
         }
@@ -76,23 +78,23 @@ extension BinaryParsingStream {
     }
     
     public func setInput(to input: Input?) {
-        self.upstreamInput = input
-        self.parsedInput = 0
+        self.state.upstreamInput = input
+        self.state.parsedInput = 0
     }
     
     public func output<S>(to inputStream: S) where S : Async.InputStream, Output == S.Input {
-        self.downstream = AnyInputStream(inputStream)
+        self.state.downstream = AnyInputStream(inputStream)
         inputStream.connect(to: self)
     }
     
     public func input(_ event: InputEvent<Input>) {
         switch event {
         case .close:
-            downstream?.close()
+            state.downstream?.close()
         case .connect(let upstream):
-            self.upstream = upstream
+            self.state.upstream = upstream
         case .error(let error):
-            downstream?.error(error)
+            state.downstream?.error(error)
         case .next(let next):
             self.setInput(to: next)
             parseInput()
@@ -102,19 +104,19 @@ extension BinaryParsingStream {
     public func connection(_ event: ConnectionEvent) {
         switch event {
         case .cancel:
-            self.downstreamDemand = 0
+            self.state.downstreamDemand = 0
         case .request(let demand):
-            self.downstreamDemand += demand
+            self.state.downstreamDemand += demand
         }
         
         parseInput()
     }
     
     private func parseInput() {
-        guard downstreamDemand > 0 else { return }
+        guard state.downstreamDemand > 0 else { return }
         
         guard let unconsumedBuffer = unconsumedBuffer else {
-            upstream?.request()
+            state.upstream?.request()
             return
         }
         
@@ -123,7 +125,7 @@ extension BinaryParsingStream {
         do {
             let state: ParsingState<Partial, Output>
             
-            if let partiallyParsed = self.partiallyParsed {
+            if let partiallyParsed = self.state.partiallyParsed {
                 state = try continueParsing(partiallyParsed, from: unconsumedBuffer)
             } else {
                 state = try startParsing(from: unconsumedBuffer)
@@ -133,22 +135,22 @@ extension BinaryParsingStream {
             case .uncompleted:
                 // All data is drained, we need to provide more data after this
                 setInput(to: nil)
-                upstream?.request()
+                self.state.upstream?.request()
             case .completed(let consumed, let result):
-                self.parsedInput = self.parsedInput &+ consumed
+                self.state.parsedInput = self.state.parsedInput &+ consumed
                 
-                if parsedInput == upstreamInput?.count {
+                if self.state.parsedInput == self.state.upstreamInput?.count {
                     setInput(to: nil)
                 }
                 
-                downstream?.next(result)
+                self.state.downstream?.next(result)
                 
-                if self.upstreamInput == nil {
-                    upstream?.request()
+                if self.state.upstreamInput == nil {
+                    self.state.upstream?.request()
                 }
             }
         } catch {
-            downstream?.error(error)
+            state.downstream?.error(error)
             
             if closeOnError {
                 self.close()

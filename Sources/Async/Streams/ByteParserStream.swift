@@ -1,19 +1,19 @@
-public protocol BinaryParsingStream: Async.Stream, ConnectionContext where Input == UnsafeBufferPointer<UInt8> {
+public protocol ByteParserStream: Async.Stream, ConnectionContext where Input == UnsafeBufferPointer<UInt8> {
     associatedtype Partial
     
-    /// The current eventloop, used to dispatch tasks (preventing stack overflows)
-    var eventloop: EventLoop { get }
-    
-    var state: BinaryParsingStreamState<Self> { get }
+    var state: ByteParserStreamState<Self> { get }
     
     /// Closes the stream on protocol errors
     var closeOnError: Bool { get }
     
-    func continueParsing(_ partial: Partial, from buffer: Input) throws -> ParsingState<Partial, Output>
-    func startParsing(from buffer: Input) throws -> ParsingState<Partial, Output>
+    func continueParsing(_ partial: Partial, from buffer: Input) throws -> ByteParserResult<Partial, Output>
+    func startParsing(from buffer: Input) throws -> ByteParserResult<Partial, Output>
 }
 
-public final class BinaryParsingStreamState<S: BinaryParsingStream> {
+public final class ByteParserStreamState<S: ByteParserStream> {
+    /// The current eventloop, used to dispatch tasks (preventing stack overflows)
+    var eventloop: EventLoop
+    
     /// The upstream that is providing byte buffers
     fileprivate var upstream: ConnectionContext?
     
@@ -35,19 +35,20 @@ public final class BinaryParsingStreamState<S: BinaryParsingStream> {
     /// Use a basic output stream to implement server output stream.
     fileprivate var downstream: AnyInputStream<S.Output>?
     
-    public init() {
+    public init(worker: Worker) {
+        eventloop = worker.eventLoop
         parsedInput = 0
         downstreamDemand = 0
         parsing = false
     }
 }
 
-public enum ParsingState<Partial, Output> {
+public enum ByteParserResult<Partial, Output> {
     case uncompleted(Partial)
     case completed(consuming: Int, result: Output)
 }
 
-extension BinaryParsingStream {
+extension ByteParserStream {
     /// Must not be called before input
     /// The remaining length after `basePointer`
     var remainder: Int? {
@@ -123,7 +124,7 @@ extension BinaryParsingStream {
         // TODO: if eventloop.recursion > eventloop.maxRecursion {
         
         do {
-            let state: ParsingState<Partial, Output>
+            let state: ByteParserResult<Partial, Output>
             
             if let partiallyParsed = self.state.partiallyParsed {
                 state = try continueParsing(partiallyParsed, from: unconsumedBuffer)

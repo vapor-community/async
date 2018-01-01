@@ -6,13 +6,16 @@ public protocol ByteParserStream: Async.Stream, ConnectionContext where Input ==
     /// Closes the stream on protocol errors
     var closeOnError: Bool { get }
     
+    /// Continues parsing a partially parsed Output
     func continueParsing(_ partial: Partial, from buffer: Input) throws -> ByteParserResult<Partial, Output>
+    
+    /// Starts parsing Output, resulting in either a partially or fully completed Output
     func startParsing(from buffer: Input) throws -> ByteParserResult<Partial, Output>
 }
 
 public final class ByteParserStreamState<S: ByteParserStream> {
     /// The current eventloop, used to dispatch tasks (preventing stack overflows)
-    var eventloop: EventLoop
+    fileprivate var eventloop: EventLoop
     
     /// The upstream that is providing byte buffers
     fileprivate var upstream: ConnectionContext?
@@ -35,6 +38,11 @@ public final class ByteParserStreamState<S: ByteParserStream> {
     /// Use a basic output stream to implement server output stream.
     fileprivate var downstream: AnyInputStream<S.Output>?
     
+    /// Sends data asynchronously, preventing stack overflows
+    fileprivate func send(_ output: S.Output) {
+        self.downstream?.next(output)
+    }
+    
     public init(worker: Worker) {
         eventloop = worker.eventLoop
         parsedInput = 0
@@ -51,7 +59,7 @@ public enum ByteParserResult<Partial, Output> {
 extension ByteParserStream {
     /// Must not be called before input
     /// The remaining length after `basePointer`
-    var remainder: Int? {
+    fileprivate var remainder: Int? {
         guard let count = state.upstreamInput?.count else {
             return nil
         }
@@ -60,12 +68,12 @@ extension ByteParserStream {
     }
     
     /// The current position where is being parsed
-    var basePointer: UnsafePointer<UInt8>? {
+    fileprivate var basePointer: UnsafePointer<UInt8>? {
         return state.upstreamInput?.baseAddress?.advanced(by: state.parsedInput)
     }
     
     /// The unconsumed data
-    var unconsumedBuffer: UnsafeBufferPointer<UInt8>? {
+    fileprivate var unconsumedBuffer: UnsafeBufferPointer<UInt8>? {
         guard let remainder = self.remainder, let pointer = self.basePointer else {
             return nil
         }
@@ -88,6 +96,7 @@ extension ByteParserStream {
         inputStream.connect(to: self)
     }
     
+    /// Free implementation of `input`. Do not overwrite in the implementation
     public func input(_ event: InputEvent<Input>) {
         switch event {
         case .close:
@@ -102,6 +111,7 @@ extension ByteParserStream {
         }
     }
     
+    /// Free implementation of `connection`. Do not overwrite in the implementation
     public func connection(_ event: ConnectionEvent) {
         switch event {
         case .cancel:
@@ -113,6 +123,11 @@ extension ByteParserStream {
         parseInput()
     }
     
+    /// Parses the inputted byteBuffer to one or no output.
+    ///
+    /// If output has been achieved, passes it downstream and requests more data otherwise
+    ///
+    /// When output has been achieved, the remainder of the input buffer will be left unused until more output is requested.
     private func parseInput() {
         guard state.downstreamDemand > 0 else { return }
         
@@ -144,7 +159,7 @@ extension ByteParserStream {
                     setInput(to: nil)
                 }
                 
-                self.state.downstream?.next(result)
+                self.state.send(result)
                 
                 if self.state.upstreamInput == nil {
                     self.state.upstream?.request()

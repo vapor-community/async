@@ -4,6 +4,10 @@ import Async
 final class EventLoopTests : XCTestCase {
     func testAsync() throws {
         let loop = try DefaultEventLoop(label: "codes.vapor.async.test.async")
+
+        let socket = loop.onTimeout(timeout: 100) { _ in /* fake socket */ }
+        socket.resume()
+        
         var nums: [Int] = []
 
         func recurse(depth: Int = 0) {

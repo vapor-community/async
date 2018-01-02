@@ -35,6 +35,11 @@ public final class DispatchEventLoop: EventLoop {
         return DispatchEventSource(source: source)
     }
 
+    /// See EventLoop.onTimeout
+    public func onTimeout(timeout: Int, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
+        fatalError("unsupported")
+    }
+
     /// See EventLoop.async
     public func async(_ callback: @escaping EventLoop.AsyncCallback) {
         queue.async { callback() }

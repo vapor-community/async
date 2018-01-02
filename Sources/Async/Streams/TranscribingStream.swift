@@ -1,4 +1,4 @@
-/// `TransformingStream`s yield exactly one output for every input.
+/// `TranscribingStream`s yield exactly one output for every input.
 ///
 /// The output yielded may be a `Future`. If the transformed `Future`
 /// results in an error, it will be forwarded downstream.
@@ -8,20 +8,50 @@
 ///
 /// The transforming stream's downstream will be automatically connected to
 /// its upstream, allowing backpressure to pass through unhindered.
-public protocol TransformingStream: Stream {
+public protocol TranscribingStream {
+    /// See InputStream.Input
+    associatedtype Input
+
+    /// See OutputStream.Output
+    associatedtype Output
+
+    /// Transforms the input to output
+    func transcribe(_ input: Input) throws -> Future<Output>
+}
+
+extension TranscribingStream {
+    /// Convert this `TranscribingStream` to a `Stream`.
+    public func stream() -> TranscribingStreamWrapper<Self> {
+        return .init(transcriber: self)
+    }
+}
+
+
+public final class TranscribingStreamWrapper<Transcriber>: Stream where Transcriber: TranscribingStream {
+    /// See InputStream.Input
+    public typealias Input = Transcriber.Input
+
+    /// See OutputStream.Output
+    public typealias Output = Transcriber.Output
+
     /// `ConnectionContext` for the connected, upstream
     /// `OutputStream` that is supplying this stream with input.
-    var upstream: ConnectionContext? { get set }
+    public var upstream: ConnectionContext?
 
     /// Connected, downstream `InputStream` that is accepting
     /// this stream's output.
-    var downstream: AnyInputStream<Output>? { get set }
+    public var downstream: AnyInputStream<Output>?
 
-    /// Transforms the input to output
-    func transform(_ input: Input) throws -> Future<Output>
-}
+    /// The internal transcriber
+    private let transcriber: Transcriber
 
-extension TransformingStream {
+    /// Create a new `TranscribingStreamWrapper`.
+    /// This is purposefully internal.
+    /// Use `.stream()` on a `TranscribingStream` to create.
+    internal init(transcriber: Transcriber) {
+        self.transcriber = transcriber
+    }
+
     /// See InputStream.input
     public func input(_ event: InputEvent<Input>) {
         switch event {
@@ -34,7 +64,7 @@ extension TransformingStream {
             downstream?.error(error)
         case .next(let input):
             do {
-                try downstream.flatMap(transform(input).stream)
+                try downstream.flatMap(transcriber.transcribe(input).stream)
             } catch {
                 downstream?.error(error)
             }

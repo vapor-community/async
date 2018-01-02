@@ -70,7 +70,7 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
     /// The current recursion depth.
     private var recursionDepth: Int
 
-    /// Create a new TranslatingStreamWrapper.
+    /// Create a new `TranslatingStreamWrapper`.
     /// This is purposefully internal.
     /// Use `.stream()` on a translating stream to create.
     internal init(translator: Translator, on worker: Worker) {

@@ -123,20 +123,19 @@ final class StreamTests : XCTestCase {
     }
 
     func testTranslatingStream() throws {
-        let stringEmitter = EmitterStream(String.self)
+        let emitter = EmitterStream([Int].self)
+        let loop = try KqueueEventLoop(label: "codes.vapor.test.translating")
 
-        let wordParser = WordParsingStream().stream()
-        stringEmitter.output(to: wordParser)
+        let stream = ArrayChunkingStream<Int>(size: 3).stream(on: loop)
+        emitter.output(to: stream)
 
         var upstream: ConnectionContext?
+        var chunks: [[Int]] = []
 
-        var words: [String] = []
-
-        wordParser.drain { req in
+        stream.drain { req in
             upstream = req
-        }.output { word in 
-            words.append(word)
-            print(word)
+        }.output { chunk in
+            chunks.append(chunk)
             upstream?.request()
         }.catch { error in
             XCTFail("\(error)")
@@ -146,12 +145,82 @@ final class StreamTests : XCTestCase {
 
         upstream?.request()
 
-        XCTAssertEqual(words.count, 0)
-        stringEmitter.emit("hello world")
-        XCTAssertEqual(words.count, 2)
-        XCTAssertEqual(words.first, "hello")
-        XCTAssertEqual(words.last, "world")
+        // test insufficient, then sufficient
+        XCTAssertEqual(chunks.count, 0)
+        emitter.emit([1, 2])
+        XCTAssertEqual(chunks.count, 0)
+        emitter.emit([3])
+        XCTAssertEqual(chunks.count, 1)
+        XCTAssertEqual(chunks[0], [1, 2, 3])
 
+        // test sufficient
+        XCTAssertEqual(chunks.count, 1)
+        emitter.emit([4, 5, 6])
+        XCTAssertEqual(chunks.count, 2)
+        XCTAssertEqual(chunks[0], [1, 2, 3])
+        XCTAssertEqual(chunks[1], [4, 5, 6])
+
+        // test insufficient, then excess
+        XCTAssertEqual(chunks.count, 2)
+        emitter.emit([7, 8])
+        XCTAssertEqual(chunks.count, 2)
+        emitter.emit([9, 10])
+        XCTAssertEqual(chunks.count, 3)
+        XCTAssertEqual(chunks[0], [1, 2, 3])
+        XCTAssertEqual(chunks[1], [4, 5, 6])
+        XCTAssertEqual(chunks[2], [7, 8, 9])
+
+        // test excess
+        emitter.emit([11, 12, 13, 14, 15])
+        XCTAssertEqual(chunks.count, 5)
+        XCTAssertEqual(chunks[0], [1, 2, 3])
+        XCTAssertEqual(chunks[1], [4, 5, 6])
+        XCTAssertEqual(chunks[2], [7, 8, 9])
+        XCTAssertEqual(chunks[3], [10, 11, 12])
+        XCTAssertEqual(chunks[4], [13, 14, 15])
+    }
+
+    func testTranslatingStreamOverflow() throws {
+        let emitter = EmitterStream([Int].self)
+        let loop = try KqueueEventLoop(label: "codes.vapor.test.translating")
+
+        let socket = loop.onTimeout(timeout: 100) { _ in /* fake socket */ }
+        socket.resume()
+
+        Thread.async { loop.runLoop() }
+
+        let stream = ArrayChunkingStream<Int>(size: 2).stream(on: loop)
+        emitter.output(to: stream)
+
+        var upstream: ConnectionContext?
+        var chunks: [[Int]] = []
+
+
+        let count = 10_000
+        let exp = expectation(description: "\(count) chunks")
+
+
+        stream.drain { req in
+            upstream = req
+        }.output { chunk in
+            chunks.append(chunk)
+            if chunks.count >= count {
+                exp.fulfill()
+            } else {
+                upstream?.request()
+            }
+        }.catch { error in
+            XCTFail("\(error)")
+        }.finally {
+            print("closed")
+        }
+
+        upstream?.request()
+
+        let huge = [Int].init(repeating: 5, count: count * 2)
+        emitter.emit(huge)
+
+        waitForExpectations(timeout: 5)
     }
 
     static let allTests = [

@@ -71,6 +71,18 @@ extension EventLoop {
     }
 }
 
+extension Thread {
+    public static func async(_ work: @escaping () -> ()) {
+        if #available(OSX 10.12, *) {
+            Thread.detachNewThread {
+                work()
+            }
+        } else {
+            fatalError()
+        }
+    }
+}
+
 /// An error converting types.
 public struct EventLoopError: Error {
     /// See Debuggable.reason

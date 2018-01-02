@@ -22,11 +22,13 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
     private var demand: UInt
     private var translator: Translator
     private var eventLoop: EventLoop
+    private var updateCount: Int
 
     init(translator: Translator, on worker: Worker) {
         self.translator = translator
         self.eventLoop = worker.eventLoop
         demand = 0
+        updateCount = 0
     }
 
     public func input(_ event: InputEvent<Input>) {
@@ -52,8 +54,17 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
             upstream = nil
             downstream = nil
         case .request(let count):
-            demand += count
-            update()
+            if updateCount > 64 {
+                eventLoop.async {
+                    self.demand += count
+                    self.updateCount = 0
+                    self.update()
+                }
+            } else {
+                demand += count
+                updateCount += 1
+                update()
+            }
         }
     }
 
@@ -77,13 +88,12 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
             self.input = nil
         case .sufficient(let output):
             self.input = nil
-            downstream?.next(output)
             demand -= 1
+            downstream?.next(output)
         case .excess(let output):
-            downstream?.next(output)
             demand -= 1
+            downstream?.next(output)
         }
-
         update()
     }
 }
@@ -94,49 +104,45 @@ public enum TranslatingStreamResult<Output> {
     case excess(Output)
 }
 
-public enum WordParsingStreamState {
-    case partial(String)
-    case excess([String])
+fileprivate enum ChunkingStreamState<S> {
+    case ready
+    case insufficient(S)
+    case excess(S)
 }
 
-public final class WordParsingStream: TranslatingStream {
-    public var state: WordParsingStreamState
+public final class ArrayChunkingStream<T>: TranslatingStream {
+    private var state: ChunkingStreamState<[T]>
+    public let size: Int
 
-    public init() {
-        state = .partial("")
+    public init(size: Int) {
+        state = .ready
+        self.size = size
     }
 
-    public func translate(input: String) -> TranslatingStreamResult<String> {
-        print("\(state): \(input)")
-
+    public func translate(input: [T]) -> TranslatingStreamResult<[T]> {
         switch state {
-        case .excess(var words):
-            let next = words.removeFirst()
-            switch words.count {
-            case 0:
-                state = .partial("")
-                return .sufficient(next)
-            default:
-                state = .excess(words)
-                return .excess(next)
-            }
-        case .partial(let partial):
-            if input.contains(" ") {
-                var words = input.split(separator: " ").map(String.init)
-                switch words.count {
-                case 0: fatalError()
-                case 1:
-                    state = .partial("")
-                    return .sufficient(partial + input)
-                default:
-                    let next = words.removeFirst()
-                    state = .excess(words)
-                    return .excess(partial + next)
-                }
-            } else {
-                state = .partial(partial + input)
-                return .insufficient
-            }
+        case .ready:
+            return handle(input)
+        case .insufficient(let remainder):
+            let input = remainder + input
+            return handle(input)
+        case .excess(let input):
+            return handle(input)
+        }
+    }
+
+    private func handle(_ input: [T]) -> TranslatingStreamResult<[T]> {
+        if input.count == size {
+            state = .ready
+            return .sufficient(input)
+        } else if input.count > size {
+            let output = [T](input[..<size])
+            let remainder = [T](input[size...])
+            state = .excess(remainder)
+            return .excess(output)
+        } else {
+            state = .insufficient(input)
+            return .insufficient
         }
     }
 }

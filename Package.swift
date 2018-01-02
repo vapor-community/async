@@ -14,5 +14,5 @@ let package = Package(
 )
 
 #if os(Linux)
-    package.dependencies.append(.package(url: "https://github.com/IBM-Swift/CEpoll.git", .exact("0.1.1")))
+    package.dependencies.append(.package(url: "https://github.com/vapor/cepoll.git", from: "0.2.0"))
 #endif

@@ -220,7 +220,7 @@ final class StreamTests : XCTestCase {
         let huge = [Int].init(repeating: 5, count: count * 2)
         emitter.emit(huge)
 
-        waitForExpectations(timeout: 5)
+        waitForExpectations(timeout: 30)
     }
 
     static let allTests = [

@@ -1,7 +1,7 @@
 import Dispatch
 import Foundation
 
-/// An error converting types.
+/// An error reading files.
 public struct FileError: Error {
     /// See Debuggable.reason
     var reason: String
@@ -9,7 +9,7 @@ public struct FileError: Error {
     /// See Debuggable.identifier
     var identifier: String
     
-    /// Creates a new core error.
+    /// Creates a new file reading error.
     init(identifier: String, reason: String) {
         self.reason = reason
         self.identifier = identifier
@@ -22,17 +22,21 @@ fileprivate final class SingleFile: Async.OutputStream, ConnectionContext {
     let path: String
     var closed = false
     var data: Data?
+    
+    /// The downstream to stream to
     var downstream: AnyInputStream<Output>?
     
     init(path: String) {
         self.path = path
     }
     
+    /// See `OutputStream.output`
     func output<S>(to inputStream: S) where S : InputStream, Output == S.Input {
         self.downstream = AnyInputStream(inputStream)
         inputStream.connect(to: self)
     }
     
+    /// See `ConnectionContext.connection`
     func connection(_ event: ConnectionEvent) {
         switch event {
         case .cancel:
@@ -80,9 +84,10 @@ public final class File: FileReader, FileCache {
     }
 
     /// See FileReader.read
-    public func read(at path: String, chunkSize: Int) -> AnyOutputStream<UnsafeBufferPointer<UInt8>>
+    public func read<S>(at path: String, into stream: S, chunkSize: Int)
+        where S: Async.InputStream, S.Input == UnsafeBufferPointer<UInt8>
     {
-        return AnyOutputStream(SingleFile(path: path))
+        SingleFile(path: path).output(to: stream)
     }
 
     /// See FileReader.fileExists

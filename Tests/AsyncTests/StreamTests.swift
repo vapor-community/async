@@ -124,7 +124,7 @@ final class StreamTests : XCTestCase {
 
     func testTranslatingStream() throws {
         let emitter = EmitterStream([Int].self)
-        let loop = try KqueueEventLoop(label: "codes.vapor.test.translating")
+        let loop = try DefaultEventLoop(label: "codes.vapor.test.translating")
 
         let stream = ArrayChunkingStream<Int>(size: 3).stream(on: loop)
         emitter.output(to: stream)
@@ -182,7 +182,7 @@ final class StreamTests : XCTestCase {
 
     func testTranslatingStreamOverflow() throws {
         let emitter = EmitterStream([Int].self)
-        let loop = try KqueueEventLoop(label: "codes.vapor.test.translating")
+        let loop = try DefaultEventLoop(label: "codes.vapor.test.translating")
 
         let socket = loop.onTimeout(timeout: 100) { _ in /* fake socket */ }
         socket.resume()
@@ -228,5 +228,54 @@ final class StreamTests : XCTestCase {
         ("testDelta", testDelta),
         ("testErrorChaining", testErrorChaining),
         ("testCloseChaining", testCloseChaining),
+        ("testTranslatingStream", testTranslatingStream),
+        ("testTranslatingStreamOverflow", testTranslatingStreamOverflow),
     ]
 }
+
+
+/// MARK: Utilities
+
+fileprivate enum ArrayChunkingStreamState<S> {
+    case ready
+    case insufficient(S)
+    case excess(S)
+}
+
+public final class ArrayChunkingStream<T>: TranslatingStream {
+    private var state: ArrayChunkingStreamState<[T]>
+    public let size: Int
+
+    public init(size: Int) {
+        state = .ready
+        self.size = size
+    }
+
+    public func translate(input: [T]) -> TranslatingStreamResult<[T]> {
+        switch state {
+        case .ready:
+            return handle(input)
+        case .insufficient(let remainder):
+            let input = remainder + input
+            return handle(input)
+        case .excess(let input):
+            return handle(input)
+        }
+    }
+
+    private func handle(_ input: [T]) -> TranslatingStreamResult<[T]> {
+        if input.count == size {
+            state = .ready
+            return .sufficient(input)
+        } else if input.count > size {
+            let output = [T](input[..<size])
+            let remainder = [T](input[size...])
+            state = .excess(remainder)
+            return .excess(output)
+        } else {
+            state = .insufficient(input)
+            return .insufficient
+        }
+    }
+}
+

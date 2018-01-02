@@ -91,7 +91,7 @@ public final class KqueueEventLoop: EventLoop {
             }
         }
 
-        print("[\(label)] \(eventCount) New Events")
+        // print("[\(label)] \(eventCount) New Events")
         events: for i in 0..<Int(eventCount) {
             let event = eventlist[i]
             let source = event.udata.assumingMemoryBound(to: KqueueEventSource.self).pointee

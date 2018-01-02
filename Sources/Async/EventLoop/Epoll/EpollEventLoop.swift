@@ -38,21 +38,29 @@ public final class EpollEventLoop: EventLoop {
 
     /// See EventLoop.onReadable
     public func onReadable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
-        let source = EpollEventSource(descriptor: descriptor, epfd: epfd, callback: callback)
-        source.event.events = EPOLLIN.rawValue
-        return source
+        return EpollEventSource(
+            epfd: epfd,
+            type: .read(descriptor: descriptor),
+            callback: callback
+        )
     }
 
     /// See EventLoop.onWritable
     public func onWritable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
-        let source = EpollEventSource(descriptor: descriptor, epfd: epfd, callback: callback)
-        source.event.events = EPOLLOUT.rawValue
-        return source
+        return EpollEventSource(
+            epfd: epfd,
+            type: .write(descriptor: descriptor),
+            callback: callback
+        )
     }
 
     /// See EventLoop.ononTimeout
     public func onTimeout(timeout: Int, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
-        return KqueueEventSource(descriptor: 1, kq: kq, type: .timer(timeout: timeout), callback: callback)
+        return EpollEventSource(
+            epfd: epfd,
+            type: .timer(timeout: timeout),
+            callback: callback
+        )
     }
 
     /// See EventLoop.async
@@ -90,33 +98,13 @@ public final class EpollEventLoop: EventLoop {
         /// print("[\(label)] \(eventCount) New Events")
         events: for i in 0..<Int(eventCount) {
             let event = eventlist[i]
-
-            let ident = Int(event.data.fd)
-            let source: EpollEventSource
-
-            if event.events & EPOLLOUT.rawValue > 0 {
-                source = writeSources[ident]!
-            } else if event.events & EPOLLIN.rawValue > 0 {
-                source = readSources[ident]!
-            } else {
-                fatalError("neither epollout or epollin on fetch")
-            }
+            let source = event.data.ptr.assumingMemoryBound(to: EpollEventSource.self).pointee
 
             if event.events & EPOLLERR.rawValue > 0 {
                 let reason = String(cString: strerror(Int32(event.data.u32)))
                 print("An error occured during an event: \(reason)")
-            } else if event.events & EPOLLHUP.rawValue > 0 {
-                source.signal(true)
-
-                if event.events & EPOLLOUT.rawValue > 0 {
-                    writeSources[ident] = nil
-                } else if event.events & EPOLLIN.rawValue > 0 {
-                    readSources[ident] = nil
-                } else {
-                    fatalError("neither epollout or epollin on eof")
-                }
             } else {
-                source.signal(false)
+                source.signal(event.events & EPOLLHUP.rawValue > 0)
             }
         }
     }

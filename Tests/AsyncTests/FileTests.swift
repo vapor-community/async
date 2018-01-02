@@ -7,7 +7,12 @@ class FileTests: XCTestCase {
         XCTAssertGreaterThan(file.count, 512)
     }
     
+    func testExists() {
+        XCTAssert(File(on: DispatchEventLoop(label: "junk-drawer")).directoryExists(at: "."))
+    }
+    
     static var allTests = [
         ("testFileRead", testFileRead),
+        ("testExists", testExists),
     ]
 }

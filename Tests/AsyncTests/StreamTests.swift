@@ -125,11 +125,104 @@ final class StreamTests : XCTestCase {
         XCTAssertEqual(results, [1, 2, 3])
         XCTAssert(closed)
     }
+    
+    func testFutureStream() {
+        let stream = FutureStream<Int, String> { int in
+            return Future(int.description)
+        }
+        
+        XCTAssertEqual(try stream.transform(3).blockingAwait(), "3")
+    }
+    
+    func testConnectingStream() {
+        let numberEmitter = EmitterStream(Int.self)
+        
+        var reached = false
+        var i = 0
+        let max = 100
+        
+        let drainStream = DrainStream(Int.self, onConnect: { upstream in
+            upstream.request(count: .max)
+        }, onInput: { int in
+            XCTAssertEqual(i, int)
+        }, onError: { error in
+            XCTFail("\(error)")
+        }, onClose: {
+            XCTAssert(i == max)
+            reached = true
+        })
+        
+        let stream = ConnectingStream<Int>()
+        numberEmitter.stream(to: stream).output(to: drainStream)
+        
+        while i < max {
+            numberEmitter.emit(i)
+            i += 1
+        }
+        
+        numberEmitter.close()
+        
+        XCTAssert(reached)
+    }
+    
+    func testClosureStream() {
+        var downstream: AnyInputStream<Int>?
+        var upstream: ConnectionContext?
+        var reached = false
+        var i = 0
+        let max = 100
+        
+        let closureStream = ClosureStream<Int>(onInput: { event in
+            switch event {
+            case .next(let int):
+                XCTAssertEqual(int, max)
+                downstream?.next(int ^ .max)
+            case .connect(let _upstream):
+                upstream = _upstream
+            case .close:
+                downstream?.close()
+            case .error(let error):
+                XCTFail("\(error)")
+            }
+        }, onOutput: { _downstream in
+            downstream = _downstream
+        }, onConnection: { event in
+            switch event {
+            case .cancel: break
+            case .request(let i):
+                upstream?.request(count: i)
+            }
+        })
+        
+        let numberEmitter = EmitterStream(Int.self)
+        numberEmitter.output(to: closureStream)
+        
+        closureStream.drain { upstream in
+            upstream.request(count: .max)
+        }.output { int in
+            XCTAssertEqual(int ^ .max, i)
+        }.catch { error in
+            XCTFail("\(error)")
+        }.finally {
+            reached = true
+        }
+        
+        while i < max {
+            numberEmitter.emit(i)
+            i += 1
+        }
+        
+        numberEmitter.close()
+        XCTAssert(reached)
+    }
 
     static let allTests = [
         ("testPipeline", testPipeline),
         ("testDelta", testDelta),
         ("testErrorChaining", testErrorChaining),
+        ("testCloseChaining", testCloseChaining),
+        ("testFutureStream", testFutureStream),
+        ("testCloseChaining", testCloseChaining),
         ("testCloseChaining", testCloseChaining),
     ]
 }

@@ -158,6 +158,13 @@ final class FutureTests : XCTestCase {
         
         XCTAssert(signal.future.isCompleted)
         XCTAssert(groupedSignal.isCompleted)
+        
+        let completed = signals.transform {
+            return Future("hello")
+        }
+        
+        XCTAssert(completed.isCompleted)
+        XCTAssertEqual(try completed.blockingAwait(), "hello")
     }
     
     func testFutureFlatMap() throws {

@@ -73,9 +73,6 @@ public final class SocketSink<Socket>: InputStream
     /// Cancels reading
     public func close() {
         socket.close()
-        if type(of: eventLoop) is DispatchEventLoop.Type {
-            resumeWriting()
-        }
         writeSource = nil
         upstream = nil
     }

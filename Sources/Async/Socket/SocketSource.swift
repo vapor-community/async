@@ -84,9 +84,6 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
     public func close() {
         socket.close()
         downstream?.close()
-        if type(of: eventLoop) is DispatchEventLoop.Type {
-            resumeReading()
-        }
         readSource = nil
         downstream = nil
     }

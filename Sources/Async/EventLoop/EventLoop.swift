@@ -1,5 +1,13 @@
 import Foundation
 
+#if os(Linux)
+    public typealias DefaultEventLoop = EpollEventLoop
+#endif
+
+#if os(macOS)
+    public typealias DefaultEventLoop = KqueueEventLoop
+#endif
+
 /// An event loop handles signaling completion of blocking work
 /// to create non-blocking, callback-based pipelines.
 public protocol EventLoop: Worker {
@@ -28,6 +36,10 @@ public protocol EventLoop: Worker {
     /// is ready to write data and the event source is resumed.
     func onWritable(descriptor: Int32, _ callback: @escaping EventCallback) -> EventSource
 
+    /// Creates a new timer event source.
+    /// This callback will be called perodically when the timeout is reached.
+    func onTimeout(milliseconds: Int, _ callback: @escaping EventLoop.EventCallback) -> EventSource
+
     /// Sets the closure to be run async.
     func async(_ callback: @escaping AsyncCallback)
 
@@ -54,8 +66,20 @@ extension EventLoop {
     public func runLoop() -> Never {
         Thread.current.threadDictionary["eventLoop"] = self
         Thread.current.name = label
-        print("[\(label)] Booting")
+        // print("[\(label)] Booting")
         while true { run() }
+    }
+}
+
+extension Thread {
+    public static func async(_ work: @escaping () -> ()) {
+        if #available(OSX 10.12, *) {
+            Thread.detachNewThread {
+                work()
+            }
+        } else {
+            fatalError()
+        }
     }
 }
 

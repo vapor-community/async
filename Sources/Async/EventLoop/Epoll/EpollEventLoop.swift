@@ -22,7 +22,7 @@ public final class EpollEventLoop: EventLoop {
     /// Create a new `EpollEventLoop`
     public init(label: String) throws {
         self.label = label
-        let status = epoll_create1(0);()
+        let status = epoll_create1(0)
         if status == -1 {
             throw EventLoopError(identifier: "epoll_create1", reason: "Could not create epoll queue.")
         }

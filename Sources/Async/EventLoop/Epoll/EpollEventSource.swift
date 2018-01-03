@@ -49,10 +49,10 @@ public final class EpollEventSource: EventSource {
             }
 
             var ts = itimerspec()
-            ts.it_interval.tv_sec = 0;
-            ts.it_interval.tv_nsec = 0;
-            ts.it_value.tv_sec = timeout / 1000;
-            ts.it_value.tv_nsec = (timeout % 1000) * 1000000;
+            ts.it_interval.tv_sec = 0
+            ts.it_interval.tv_nsec = 0
+            ts.it_value.tv_sec = timeout / 1000
+            ts.it_value.tv_nsec = (timeout % 1000) * 1000000
 
             if timerfd_settime(tfd, 0, &ts, nil) < 0 {
                 close(tfd);

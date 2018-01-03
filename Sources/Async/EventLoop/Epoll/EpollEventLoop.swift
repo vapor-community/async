@@ -55,7 +55,7 @@ public final class EpollEventLoop: EventLoop {
     }
 
     /// See EventLoop.ononTimeout
-    public func onTimeout(timeout: Int, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
+    public func onTimeout(milleseconds: Int, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
         return EpollEventSource(
             epfd: epfd,
             type: .timer(timeout: timeout),

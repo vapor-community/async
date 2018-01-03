@@ -33,9 +33,9 @@ extension FileReader {
             promise.complete(data)
         })
         
-        upstream?.request()
-        
         self.read(at: path, into: stream, chunkSize: chunkSize)
+        
+        upstream?.request()
         
         return promise.future
     }

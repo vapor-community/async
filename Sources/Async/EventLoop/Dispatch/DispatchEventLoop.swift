@@ -36,7 +36,7 @@ public final class DispatchEventLoop: EventLoop {
     }
 
     /// See EventLoop.onTimeout
-    public func onTimeout(timeout: Int, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
+    public func onTimeout(milliseconds: Int, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
         fatalError("unsupported")
     }
 

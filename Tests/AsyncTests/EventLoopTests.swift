@@ -4,7 +4,7 @@ import Async
 final class EventLoopTests : XCTestCase {
     func testAsync() throws {
         let loop = try DefaultEventLoop(label: "codes.vapor.async.test.async")
-        let socket = loop.onTimeout(timeout: 100) { _ in /* fake socket */ }
+        let socket = loop.onTimeout(milliseconds: 100) { _ in /* fake socket */ }
         socket.resume()
         
         var nums: [Int] = []
@@ -35,7 +35,7 @@ final class EventLoopTests : XCTestCase {
 
         var count = 0
         var source: EventSource?
-        source = loop.onTimeout(timeout: 100) { eof in
+        source = loop.onTimeout(milliseconds: 100) { eof in
             count += 1
             if count > 10 {
                 promise.complete()

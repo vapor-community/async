@@ -48,8 +48,8 @@ public final class KqueueEventLoop: EventLoop {
 
 
     /// See EventLoop.ononTimeout
-    public func onTimeout(timeout: Int, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
-        return KqueueEventSource(descriptor: 1, kq: kq, type: .timer(timeout: timeout), callback: callback)
+    public func onTimeout(milliseconds: Int, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
+        return KqueueEventSource(descriptor: 1, kq: kq, type: .timer(timeout: milliseconds), callback: callback)
     }
 
     /// See EventLoop.async
@@ -87,7 +87,6 @@ public final class KqueueEventLoop: EventLoop {
             default:
                 let reason = String(cString: strerror(Int32(errno)))
                 fatalError("An error occured while running kevent: \(reason).")
-                return
             }
         }
 

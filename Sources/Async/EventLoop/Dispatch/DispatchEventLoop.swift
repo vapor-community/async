@@ -47,8 +47,30 @@ public final class DispatchEventLoop: EventLoop {
 
     /// See EventLoop.run
     public func run() {
-        /// FIXME: this run is a `-> Never` which will
-        /// only work correctly if `run()` or `runLoop()` is called only once.
-        RunLoop.main.run()
+        // From the documentation of RunLoop.run():
+        // "If no input sources or timers are attached to the run loop, this method exits immediately."
+
+        // To avoid this, the following block creates a pending timer far into the future to keep the run loop
+        // alive until sockets are connected.
+        if #available(OSX 10.12, *) {
+            // New syntax for macOS 10.12+ and Linux
+            _ = Timer.scheduledTimer(withTimeInterval: TimeInterval.greatestFiniteMagnitude,
+                                     repeats: true,
+                                     block: { _ in })
+        } else {
+            // Fallback on earlier macOS versions
+            #if os(macOS)
+            _ = Timer.scheduledTimer(timeInterval: TimeInterval.greatestFiniteMagnitude,
+                                     target: self,
+                                     selector: #selector(keepAlive),
+                                     userInfo: nil,
+                                     repeats: true)
+            #endif
+        }
+
+        RunLoop.current.run()
+    }
+
+    @objc private func keepAlive() {
     }
 }

@@ -34,6 +34,7 @@ public final class EpollEventSource: EventSource {
         type: EpollEventSourceType,
         callback: @escaping EventLoop.EventCallback
     ) {
+        print("\(#function)")
         var event = epoll_event()
         switch type {
         case .read(let descriptor):
@@ -76,6 +77,7 @@ public final class EpollEventSource: EventSource {
 
     /// See EventSource.suspend
     public func suspend() {
+        print("\(#function)")
         switch state {
         case .cancelled:
             fatalError("Called `.suspend()` on a cancelled EpollEventSource.")
@@ -88,6 +90,7 @@ public final class EpollEventSource: EventSource {
 
     /// See EventSource.resume
     public func resume() {
+        print("\(#function)")
         switch state {
         case .cancelled:
             fatalError("Called `.resume()` on a cancelled EpollEventSource.")
@@ -100,6 +103,7 @@ public final class EpollEventSource: EventSource {
 
     /// See EventSource.cancel
     public func cancel() {
+        print("\(#function)")
         switch state {
         case .cancelled: fatalError("Called `.cancel()` on a cancelled EpollEventSource.")
         case .resumed, .suspended:
@@ -107,6 +111,11 @@ public final class EpollEventSource: EventSource {
             // deallocate reference to self
             pointer.deallocate(capacity: 1)
             pointer.deinitialize()
+
+            switch type {
+            case .timer: close(event.data.fd)
+            default: break
+            }
         }
     }
 
@@ -116,6 +125,7 @@ public final class EpollEventSource: EventSource {
 
     /// Updates the `epoll_event` to the efd handle.
     private func update(op: Int32) {
+        print("\(#function)")
         let response = epoll_ctl(epfd, op, event.data.fd, &event);
         if response < 0 {
             let reason = String(cString: strerror(errno))
@@ -123,6 +133,13 @@ public final class EpollEventSource: EventSource {
         }
     }
 
+    deinit {
+        print("\(#function)")
+//        switch state {
+//        case .resumed, .suspended: cancel()
+//        default: break
+//        }
+    }
 }
 
 #endif

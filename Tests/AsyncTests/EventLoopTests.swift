@@ -3,10 +3,14 @@ import Async
 
 final class EventLoopTests : XCTestCase {
     func testAsync() throws {
+        print("\(#line)")
         let loop = try DefaultEventLoop(label: "codes.vapor.async.test.async")
+        print("\(#line)")
 
         let socket = loop.onTimeout(timeout: 100) { _ in /* fake socket */ }
+        print("\(#line)")
         socket.resume()
+        print("\(#line)")
         
         var nums: [Int] = []
 

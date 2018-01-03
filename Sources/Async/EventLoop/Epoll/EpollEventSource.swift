@@ -28,23 +28,26 @@ public final class EpollEventSource: EventSource {
     /// This source's type
     private let type: EpollEventSourceType
 
+    /// This source's descriptor
+    private let descriptor: Int32
+
     /// Create a new `EpollEventSource` for the supplied descriptor.
     internal init(
         epfd: Int32,
         type: EpollEventSourceType,
         callback: @escaping EventLoop.EventCallback
     ) {
-        print("\(#function)")
+        let fd: Int32
         var event = epoll_event()
         switch type {
         case .read(let descriptor):
-            event.data.fd = descriptor
+            fd = descriptor
             event.events = EPOLLET.rawValue | EPOLLIN.rawValue
         case .write(let descriptor):
-            event.data.fd = descriptor
+            fd = descriptor
             event.events = EPOLLET.rawValue | EPOLLOUT.rawValue
         case .timer(let timeout):
-            let tfd = timerfd_create(CLOCK_MONOTONIC, 0)
+            let tfd = timerfd_create(CLOCK_MONOTONIC, Int32(TFD_NONBLOCK))
             if tfd == -1 {
                 fatalError("timerfd_create() failed: errno=\(errno)")
             }
@@ -60,24 +63,26 @@ public final class EpollEventSource: EventSource {
                 fatalError("timerfd_settime() failed: errno=\(errno)")
             }
 
-            event.data.fd = tfd
+            fd = tfd
             event.events = EPOLLIN.rawValue
         }
 
         let pointer = UnsafeMutablePointer<EpollEventSource>.allocate(capacity: 1)
         event.data.ptr = UnsafeMutableRawPointer(pointer)
 
-        self.type = type
-        self.pointer = pointer
-        self.callback = callback
         state = .suspended
-        self.epfd = epfd
+        self.pointer = pointer
+        self.type = type
         self.event = event
+        self.callback = callback
+        self.epfd = epfd
+        self.descriptor = fd
+
+        pointer.initialize(to: self)
     }
 
     /// See EventSource.suspend
     public func suspend() {
-        print("\(#function)")
         switch state {
         case .cancelled:
             fatalError("Called `.suspend()` on a cancelled EpollEventSource.")
@@ -90,7 +95,6 @@ public final class EpollEventSource: EventSource {
 
     /// See EventSource.resume
     public func resume() {
-        print("\(#function)")
         switch state {
         case .cancelled:
             fatalError("Called `.resume()` on a cancelled EpollEventSource.")
@@ -103,7 +107,6 @@ public final class EpollEventSource: EventSource {
 
     /// See EventSource.cancel
     public func cancel() {
-        print("\(#function)")
         switch state {
         case .cancelled: fatalError("Called `.cancel()` on a cancelled EpollEventSource.")
         case .resumed, .suspended:
@@ -125,20 +128,11 @@ public final class EpollEventSource: EventSource {
 
     /// Updates the `epoll_event` to the efd handle.
     private func update(op: Int32) {
-        print("\(#function)")
-        let response = epoll_ctl(epfd, op, event.data.fd, &event);
-        if response < 0 {
+        let ctl = epoll_ctl(epfd, op, descriptor, &event);
+        if ctl == -1 {
             let reason = String(cString: strerror(errno))
-            print("An error occured during EpollEventSource.update: \(reason)")
+            fatalError("An error occured during EpollEventSource.update: \(reason)")
         }
-    }
-
-    deinit {
-        print("\(#function)")
-//        switch state {
-//        case .resumed, .suspended: cancel()
-//        default: break
-//        }
     }
 }
 

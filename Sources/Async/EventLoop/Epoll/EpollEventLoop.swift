@@ -56,7 +56,6 @@ public final class EpollEventLoop: EventLoop {
 
     /// See EventLoop.ononTimeout
     public func onTimeout(timeout: Int, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
-        print("\(#function)")
         return EpollEventSource(
             epfd: epfd,
             type: .timer(timeout: timeout),
@@ -92,8 +91,7 @@ public final class EpollEventLoop: EventLoop {
         // check for new events
         let eventCount = epoll_wait(epfd, eventlist.baseAddress, Int32(eventlist.count), -1)
         guard eventCount >= 0 else {
-            print("An error occured while running kevent: \(eventCount).")
-            return
+            fatalError("An error occured while running kevent: \(eventCount).")
         }
 
         /// print("[\(label)] \(eventCount) New Events")
@@ -103,7 +101,7 @@ public final class EpollEventLoop: EventLoop {
 
             if event.events & EPOLLERR.rawValue > 0 {
                 let reason = String(cString: strerror(Int32(event.data.u32)))
-                print("An error occured during an event: \(reason)")
+                fatalError("An error occured during an event: \(reason)")
             } else {
                 source.signal(event.events & EPOLLHUP.rawValue > 0)
             }

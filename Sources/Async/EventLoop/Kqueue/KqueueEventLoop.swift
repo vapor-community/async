@@ -86,7 +86,7 @@ public final class KqueueEventLoop: EventLoop {
                 return
             default:
                 let reason = String(cString: strerror(Int32(errno)))
-                print("An error occured while running kevent: \(reason).")
+                fatalError("An error occured while running kevent: \(reason).")
                 return
             }
         }
@@ -97,7 +97,7 @@ public final class KqueueEventLoop: EventLoop {
             let source = event.udata.assumingMemoryBound(to: KqueueEventSource.self).pointee
             if event.flags & UInt16(EV_ERROR) > 0 {
                 let reason = String(cString: strerror(Int32(event.data)))
-                print("An error occured during an event: \(reason)")
+                fatalError("An error occured during an event: \(reason)")
             } else {
                 source.signal(event.flags & UInt16(EV_EOF) > 0)
             }

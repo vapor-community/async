@@ -66,7 +66,7 @@ extension EventLoop {
     public func runLoop() -> Never {
         Thread.current.threadDictionary["eventLoop"] = self
         Thread.current.name = label
-        print("[\(label)] Booting")
+        // print("[\(label)] Booting")
         while true { run() }
     }
 }

@@ -1,6 +1,10 @@
 public protocol ByteParserStream: Async.Stream, ConnectionContext where Input == UnsafeBufferPointer<UInt8> {
+    /// Any type that can be used to carry partially completed data into `continueParsing`
+    ///
+    /// If there are multiple partial states you can use an enum
     associatedtype Partial
     
+    /// A state kept by the Async library used to keep track of which data is parsed and if more data is needed
     var state: ByteParserStreamState<Self> { get }
     
     /// Closes the stream on protocol errors

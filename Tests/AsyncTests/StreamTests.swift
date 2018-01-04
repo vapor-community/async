@@ -270,7 +270,7 @@ final class StreamTests : XCTestCase {
         let emitter = EmitterStream([Int].self)
         let loop = try DefaultEventLoop(label: "codes.vapor.test.translating")
 
-        let socket = loop.onTimeout(timeout: 100) { _ in /* fake socket */ }
+        let socket = loop.onTimeout(milliseconds: 100) { _ in /* fake socket */ }
         socket.resume()
 
         Thread.async { loop.runLoop() }

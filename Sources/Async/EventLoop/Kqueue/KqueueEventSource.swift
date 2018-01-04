@@ -54,7 +54,7 @@ public final class KqueueEventSource: EventSource {
         self.callback = callback
         self.kq = kq
 
-        pointer.pointee = self
+        pointer.initialize(to: self)
     }
 
     /// See EventSource.suspend
@@ -118,13 +118,9 @@ public final class KqueueEventSource: EventSource {
             let response = kevent(kq, &event, 1, nil, 0, nil)
             if response < 0 {
                 let reason = String(cString: strerror(errno))
-                print("An error occured during KqueueEventSource.update: \(reason)")
+                fatalError("An error occured during KqueueEventSource.update: \(reason)")
             }
         }
-    }
-
-    deinit {
-        print("\(type(of: self)).\(#function)")
     }
 }
 

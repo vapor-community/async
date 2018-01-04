@@ -22,7 +22,7 @@ public final class EpollEventLoop: EventLoop {
     /// Create a new `EpollEventLoop`
     public init(label: String) throws {
         self.label = label
-        let status = epoll_create1(0);()
+        let status = epoll_create1(0)
         if status == -1 {
             throw EventLoopError(identifier: "epoll_create1", reason: "Could not create epoll queue.")
         }
@@ -55,10 +55,10 @@ public final class EpollEventLoop: EventLoop {
     }
 
     /// See EventLoop.ononTimeout
-    public func onTimeout(timeout: Int, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
+    public func onTimeout(milliseconds: Int, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
         return EpollEventSource(
             epfd: epfd,
-            type: .timer(timeout: timeout),
+            type: .timer(timeout: milliseconds),
             callback: callback
         )
     }
@@ -91,8 +91,7 @@ public final class EpollEventLoop: EventLoop {
         // check for new events
         let eventCount = epoll_wait(epfd, eventlist.baseAddress, Int32(eventlist.count), -1)
         guard eventCount >= 0 else {
-            print("An error occured while running kevent: \(eventCount).")
-            return
+            fatalError("An error occured while running kevent: \(eventCount).")
         }
 
         /// print("[\(label)] \(eventCount) New Events")
@@ -102,7 +101,7 @@ public final class EpollEventLoop: EventLoop {
 
             if event.events & EPOLLERR.rawValue > 0 {
                 let reason = String(cString: strerror(Int32(event.data.u32)))
-                print("An error occured during an event: \(reason)")
+                fatalError("An error occured during an event: \(reason)")
             } else {
                 source.signal(event.events & EPOLLHUP.rawValue > 0)
             }

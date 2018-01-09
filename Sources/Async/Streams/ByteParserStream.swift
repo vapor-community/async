@@ -1,3 +1,4 @@
+/// Parses incoming `ByteBuffer` to an Output. Captures partially complete parsing states.
 public protocol ByteParserStream: TranslatingStream where Input == UnsafeBufferPointer<UInt8> {
     /// Any type that can be used to carry partially completed data into `continueParsing`
     ///
@@ -11,6 +12,7 @@ public protocol ByteParserStream: TranslatingStream where Input == UnsafeBufferP
     func parseBytes(from buffer: Input, partial: Partial?) throws -> ByteParserResult<Self>
 }
 
+/// Keeps track of variables that are related to the parsing process
 public final class ByteParserStreamState<S> where S: ByteParserStream {
     /// The current eventloop, used to dispatch tasks (preventing stack overflows)
     fileprivate var eventloop: EventLoop
@@ -21,12 +23,14 @@ public final class ByteParserStreamState<S> where S: ByteParserStream {
     /// Stores partially parsed data
     fileprivate var partiallyParsed: S.Partial?
     
+    /// Creates a new state tracker
     public init(worker: Worker) {
         eventloop = worker.eventLoop
         parsedInput = 0
     }
 }
 
+/// Captures the progress of a parsing step
 public enum ByteParserResult<S> where S: ByteParserStream {
     case uncompleted(S.Partial)
     case completed(consuming: Int, result: S.Output)

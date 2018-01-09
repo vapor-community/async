@@ -1,3 +1,6 @@
+/// Serializes input into one or more `ByteBuffer`s
+///
+/// Requires the sent ByteBuffer to be available asynchronously.
 public protocol ByteSerializerStream: Async.Stream, ConnectionContext where Output == UnsafeBufferPointer<UInt8> {
     associatedtype SerializationState
     
@@ -14,6 +17,7 @@ public protocol ByteSerializerStream: Async.Stream, ConnectionContext where Outp
     func serialize(_ input: Input, state: SerializationState?) -> ByteSerializerStreamResult<Self>
 }
 
+/// Indicates the progress in serializing the S.Input
 public enum ByteSerializerStreamResult<S: ByteSerializerStream> {
     case incomplete(UnsafeBufferPointer<UInt8>, state: S.SerializationState)
     case complete(UnsafeBufferPointer<UInt8>)
@@ -75,6 +79,7 @@ public final class ByteSerializerStreamState<S: ByteSerializerStream> {
 }
 
 extension ByteSerializerStream {
+    /// See `ConnectionContext.connection`
     public func connection(_ event: ConnectionEvent) {
         switch event {
         case .request(let amount):
@@ -111,6 +116,7 @@ extension ByteSerializerStream {
         }
     }
     
+    /// Internal helper that handles serializing input correctly and the processing of the results
     fileprivate func _serialize(_ input: Input, state: SerializationState?) {
         let result = self.serialize(input, state: state)
         
@@ -124,6 +130,7 @@ extension ByteSerializerStream {
         }
     }
     
+    /// See `InputStream.input`
     public func input(_ event: InputEvent<Input>) {
         switch event {
         case .connect(let context):
@@ -137,11 +144,13 @@ extension ByteSerializerStream {
         }
     }
     
+    /// See `OutputStream.output`
     public func output<S>(to inputStream: S) where S : InputStream, Self.Output == S.Input {
         state.downstream = AnyInputStream(inputStream)
         inputStream.connect(to: self)
     }
     
+    /// Queues a new input to the backlog and serializes the first input efficiently
     fileprivate func queue(_ input: Input) {
         guard state.downstreamDemand > 0 else {
             state.backlog.append(input)

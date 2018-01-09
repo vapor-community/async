@@ -25,8 +25,10 @@ public final class PushStream<Pushing>: Stream, ConnectionContext {
         }
         
         // Serialized remainder backlog
-        while downstreamDemand > 0, consumedBacklog > 0 {
-            push(backlog[consumedBacklog])
+        while downstreamDemand > 0, consumedBacklog < self.backlog.count {
+            let pushed = backlog[consumedBacklog]
+            consumedBacklog += 1
+            push(pushed)
         }
     }
     

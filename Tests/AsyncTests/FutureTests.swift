@@ -108,6 +108,58 @@ final class FutureTests : XCTestCase {
         group.wait()
     }
     
+    func testAlways() {
+        var always = false
+        
+        Signal(error: CustomError()).always {
+            always = true
+        }
+        
+        XCTAssert(always)
+        
+        always = false
+        
+        Signal(()).always {
+            always = true
+        }
+        
+        XCTAssert(always)
+    }
+    
+    func testFutureClosureInit() throws {
+        let future = Future("hello")
+        
+        let otherFuture = Future<String> {
+            return future
+        }
+        
+        try XCTAssertEqual(otherFuture.blockingAwait(), "hello")
+    }
+    
+    func testDone() throws {
+        XCTAssert(Signal.done.isCompleted)
+        XCTAssertNoThrow(try Signal.done.blockingAwait())
+        
+        let signal = Promise<Void>()
+        
+        let signals: [Signal] = [
+            .done,
+            .done,
+            .done,
+            .done,
+            signal.future
+        ]
+        
+        let groupedSignal = signals.flatten()
+        
+        XCTAssert(!groupedSignal.isCompleted)
+        
+        signal.complete()
+        
+        XCTAssert(signal.future.isCompleted)
+        XCTAssert(groupedSignal.isCompleted)
+    }
+    
     func testFutureFlatMap() throws {
         let string = Promise<String>()
         let bool = Promise<Bool>()
@@ -204,9 +256,51 @@ final class FutureTests : XCTestCase {
         let future2 = Future<Any>(error: CustomError())
         XCTAssertThrowsError(try future2.blockingAwait())
     }
-
-    func testAwait() throws {
+    
+    func testArrayFlatten() throws {
+        var promises = [Promise<Int>]()
+        let n = 100
         
+        for _ in 0..<n {
+            promises.append(Promise<Int>())
+        }
+        
+        let futures = promises.map { $0.future }
+        
+        for i in 0..<promises.count - 1 {
+            promises[i].complete(i)
+        }
+        
+        let future = futures.flatten()
+        
+        XCTAssertFalse(future.isCompleted)
+        
+        promises.last?.complete(promises.count - 1)
+        
+        XCTAssert(future.isCompleted)
+        
+        let results = try future.blockingAwait()
+        
+        for (lhs, rhs) in results.enumerated() {
+            XCTAssertEqual(lhs, rhs)
+        }
+    }
+    
+    func testFlatMap() throws {
+        let hello = Future("Hello")
+        let world = Future("World")
+        let smiley = Future(":)")
+        
+        let future0 = flatMap(to: String.self, hello, world) { a, b in
+            return Future("\(a), \(b)!")
+        }
+        
+        let future1 = flatMap(to: String.self, hello, world, smiley) { a, b, c in
+            return Future("\(a), \(b)! \(c)")
+        }
+        
+        XCTAssertEqual(try future0.blockingAwait(), "Hello, World!")
+        XCTAssertEqual(try future1.blockingAwait(), "Hello, World! :)")
     }
 
     static let allTests = [
@@ -218,12 +312,16 @@ final class FutureTests : XCTestCase {
         ("testFutureMap", testFutureMap),
         ("testFutureFlatMap", testFutureFlatMap),
         ("testFutureFlatMap2", testFutureFlatMap2),
+        ("testAlways", testAlways),
+        ("testFutureClosureInit", testFutureClosureInit),
+        ("testArrayFlatten", testArrayFlatten),
+        ("testDone", testDone),
+        ("testArrayFlatten", testArrayFlatten),
         ("testFutureFlatMapErrors", testFutureFlatMapErrors),
         ("testSimpleMap", testSimpleMap),
         ("testCoalescing", testCoalescing),
         ("testFutureFlatMapErrors2", testFutureFlatMapErrors2),
         ("testPrecompleted", testPrecompleted),
-        ("testAwait", testAwait),
     ]
 }
 

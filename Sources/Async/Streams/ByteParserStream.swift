@@ -18,34 +18,15 @@ public final class ByteParserStreamState<S: ByteParserStream> {
     /// The current eventloop, used to dispatch tasks (preventing stack overflows)
     fileprivate var eventloop: EventLoop
     
-    /// The upstream that is providing byte buffers
-    fileprivate var upstream: ConnectionContext?
-    
     /// The current offset where is being parsed
     fileprivate var parsedInput: Int
-    
-    /// Remaining downstream demand
-    fileprivate var downstreamDemand: UInt
-    
-    /// Indicates that the stream is currently parsing, preventing multiple actions from being dispatched
-    fileprivate var parsing: Bool
     
     /// Stores partially parsed data
     fileprivate var partiallyParsed: S.Partial?
     
-    /// Use a basic output stream to implement server output stream.
-    fileprivate var downstream: AnyInputStream<S.Output>?
-    
-    /// Sends data asynchronously, preventing stack overflows
-    fileprivate func send(_ output: S.Output) {
-        self.downstream?.next(output)
-    }
-    
     public init(worker: Worker) {
         eventloop = worker.eventLoop
         parsedInput = 0
-        downstreamDemand = 0
-        parsing = false
     }
 }
 
@@ -73,9 +54,6 @@ extension ByteParserStream {
         
         switch state {
         case .uncompleted:
-            // All data is drained, we need to provide more data after this
-            self.state.upstream?.request()
-            
             return .insufficient
         case .completed(let consumed, let result):
             self.state.parsedInput = self.state.parsedInput &+ consumed

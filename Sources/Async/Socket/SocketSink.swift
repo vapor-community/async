@@ -12,8 +12,15 @@ public final class SocketSink<Socket>: InputStream
     public var socket: Socket
 
     /// Data being fed into the client stream is stored here.
-    private var inputBuffer: UnsafeBufferPointer<UInt8>?
-
+    private var inputBuffer: UnsafeBufferPointer<UInt8>? {
+        didSet {
+            written = 0
+        }
+    }
+    
+    /// The amount of bytes already written from the `inputBuffer`
+    private var written: Int
+    
     /// Stores write event source.
     private var writeSource: EventSource?
 
@@ -33,6 +40,7 @@ public final class SocketSink<Socket>: InputStream
         // Allocate one TCP packet
         self.inputBuffer = nil
         self.socketIsFull = false
+        self.written = 0
     }
 
     /// See InputStream.input
@@ -65,9 +73,6 @@ public final class SocketSink<Socket>: InputStream
     /// Cancels reading
     public func close() {
         socket.close()
-        if type(of: eventLoop) is DispatchEventLoop.Type {
-            resumeWriting()
-        }
         writeSource = nil
         upstream = nil
     }
@@ -122,16 +127,22 @@ public final class SocketSink<Socket>: InputStream
         }
 
         do {
-            let write = try socket.write(from: input)
+            let buffer = UnsafeBufferPointer<UInt8>(
+                start: input.baseAddress?.advanced(by: written),
+                count: input.count - written
+            )
+            
+            let write = try socket.write(from: buffer)
             switch write {
             case .wrote(let count):
-                switch count {
+                switch count + written {
                 case input.count:
                     // wrote everything, suspend until we get more data to write
                     inputBuffer = nil
                     suspendWriting()
                     upstream?.request()
-                default: print("not all data was written: \(count)/\(input.count)")
+                default:
+                    written += count
                 }
             case .wouldBlock: socketIsFull = true
             }
@@ -164,5 +175,3 @@ extension Socket {
         return .init(socket: self, on: eventLoop)
     }
 }
-
-

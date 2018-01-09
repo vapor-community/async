@@ -317,7 +317,11 @@ final class FutureTests : XCTestCase {
         ("testArrayFlatten", testArrayFlatten),
         ("testDone", testDone),
         ("testArrayFlatten", testArrayFlatten),
-        ("testArrayFlatten", testArrayFlatten),
+        ("testFutureFlatMapErrors", testFutureFlatMapErrors),
+        ("testSimpleMap", testSimpleMap),
+        ("testCoalescing", testCoalescing),
+        ("testFutureFlatMapErrors2", testFutureFlatMapErrors2),
+        ("testPrecompleted", testPrecompleted),
     ]
 }
 

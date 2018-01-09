@@ -1,55 +1,66 @@
-#if os(macOS)
+#if os(Linux)
 
-import Darwin
-import Foundation
+import Glibc
+import CEpoll
 
-/// Kqueue based `EventLoop` implementation.
-public final class KqueueEventLoop: EventLoop {
+/// Epoll based `EventLoop` implementation.
+public final class EpollEventLoop: EventLoop {
     /// See EventLoop.label
-    public let label: String
+    public var label: String
 
-    /// The `kqueue` handle.
-    private let kq: Int32
-
-    /// Event list buffer. This will be passed to
-    /// kevent each time the event loop is ready for
-    /// additional signals.
-    private var eventlist: UnsafeMutableBufferPointer<kevent>
+    /// The epoll handle.
+    private let epfd: Int32
 
     /// Async task to run
     private var task: AsyncCallback?
 
-    /// Create a new `KqueueEventLoop`
+    /// Event list buffer. This will be passed to
+    /// kevent each time the event loop is ready for
+    /// additional signals.
+    private var eventlist: UnsafeMutableBufferPointer<epoll_event>
+
+    /// Create a new `EpollEventLoop`
     public init(label: String) throws {
         self.label = label
-        let status = kqueue()
+        let status = epoll_create1(0)
         if status == -1 {
-            throw EventLoopError(identifier: "kqueue", reason: "Could not create kqueue.")
+            throw EventLoopError(identifier: "epoll_create1", reason: "Could not create epoll queue.")
         }
-        self.kq = status
+        self.epfd = status
 
         /// the maxiumum amount of events to handle per cycle
         let maxEvents = 4096
         eventlist = .init(start: .allocate(capacity: maxEvents), count: maxEvents)
 
-        /// set async task to nil
+        /// set current task to nil
         task = nil
     }
 
     /// See EventLoop.onReadable
     public func onReadable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
-        return KqueueEventSource(descriptor: descriptor, kq: kq, type: .read, callback: callback)
+        return EpollEventSource(
+            epfd: epfd,
+            type: .read(descriptor: descriptor),
+            callback: callback
+        )
     }
 
     /// See EventLoop.onWritable
     public func onWritable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
-        return KqueueEventSource(descriptor: descriptor, kq: kq, type: .write, callback: callback)
+        return EpollEventSource(
+            epfd: epfd,
+            type: .write(descriptor: descriptor),
+            callback: callback
+        )
     }
-
 
     /// See EventLoop.ononTimeout
     public func onTimeout(milliseconds: Int, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
-        return KqueueEventSource(descriptor: 1, kq: kq, type: .timer(timeout: milliseconds), callback: callback)
+        return EpollEventSource(
+            epfd: epfd,
+            type: .timer(timeout: milliseconds),
+            callback: callback
+        )
     }
 
     /// See EventLoop.async
@@ -78,33 +89,23 @@ public final class KqueueEventLoop: EventLoop {
         }
 
         // check for new events
-        let eventCount = kevent(kq, nil, 0, eventlist.baseAddress, Int32(eventlist.count), nil)
+        let eventCount = epoll_wait(epfd, eventlist.baseAddress, Int32(eventlist.count), -1)
         guard eventCount >= 0 else {
-            switch errno {
-            case EINTR:
-                run() // run again
-                return
-            default:
-                let reason = String(cString: strerror(Int32(errno)))
-                fatalError("An error occured while running kevent: \(reason).")
-            }
+            fatalError("An error occured while running kevent: \(eventCount).")
         }
 
-        // print("[\(label)] \(eventCount) New Events")
+        /// print("[\(label)] \(eventCount) New Events")
         events: for i in 0..<Int(eventCount) {
             let event = eventlist[i]
-            let source = event.udata.assumingMemoryBound(to: KqueueEventSource.self).pointee
-            if event.flags & UInt16(EV_ERROR) > 0 {
-                let reason = String(cString: strerror(Int32(event.data)))
+            let source = event.data.ptr.assumingMemoryBound(to: EpollEventSource.self).pointee
+
+            if event.events & EPOLLERR.rawValue > 0 {
+                let reason = String(cString: strerror(Int32(event.data.u32)))
                 fatalError("An error occured during an event: \(reason)")
             } else {
-                source.signal(event.flags & UInt16(EV_EOF) > 0)
+                source.signal(event.events & EPOLLHUP.rawValue > 0)
             }
         }
-    }
-
-    deinit {
-        eventlist.baseAddress?.deallocate(capacity: eventlist.count)
     }
 }
 

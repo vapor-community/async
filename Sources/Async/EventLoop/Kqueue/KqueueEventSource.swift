@@ -2,13 +2,19 @@
 
 import Darwin
 
+internal enum KqueueEventSourceType {
+    case read
+    case write
+    case timer(timeout: Int)
+}
+
 /// Kqueue based `EventSource` implementation.
 public final class KqueueEventSource: EventSource {
     /// See EventSource.state
     public var state: EventSourceState
 
     /// The underlying `kevent`.
-    internal var event: kevent
+    private var event: kevent
 
     /// This event's `kqueue` handle.
     private let kq: Int32
@@ -16,17 +22,39 @@ public final class KqueueEventSource: EventSource {
     /// The callback to signal.
     private var callback: EventLoop.EventCallback
 
+    /// Pointer to this event source to store on kevent
+    private var pointer: UnsafeMutablePointer<KqueueEventSource>
+
     /// Create a new `KqueueEventSource` for the supplied descriptor.
-    internal init(descriptor: Int32, kq: Int32, callback: @escaping EventLoop.EventCallback) {
-        self.callback = callback
-        state = .suspended
-        self.kq = kq
+    internal init(
+        descriptor: Int32,
+        kq: Int32,
+        type: KqueueEventSourceType,
+        callback: @escaping EventLoop.EventCallback
+    ) {
         var event = kevent()
+        switch type {
+        case .read:
+            event.filter = Int16(EVFILT_READ)
+        case .write:
+            event.filter = Int16(EVFILT_WRITE)
+        case .timer(let timeout):
+            event.filter = Int16(EVFILT_TIMER)
+            event.data = timeout
+        }
         event.ident = UInt(descriptor)
         event.flags = UInt16(EV_ADD | EV_DISABLE)
-        event.fflags = 0
-        event.data = 0
+
+        let pointer = UnsafeMutablePointer<KqueueEventSource>.allocate(capacity: 1)
+        event.udata = UnsafeMutableRawPointer(pointer)
+
+        state = .suspended
+        self.pointer = pointer
         self.event = event
+        self.callback = callback
+        self.kq = kq
+
+        pointer.initialize(to: self)
     }
 
     /// See EventSource.suspend
@@ -64,6 +92,10 @@ public final class KqueueEventSource: EventSource {
         case .resumed, .suspended:
             event.flags = UInt16(EV_DELETE)
             state = .cancelled
+
+            // deallocate reference to self
+            pointer.deallocate(capacity: 1)
+            pointer.deinitialize()
         }
     }
 
@@ -71,9 +103,7 @@ public final class KqueueEventSource: EventSource {
     internal func signal(_ eof: Bool) {
         switch state {
         case .resumed:
-            if eof {
-                state = .cancelled
-            }
+            if eof { defer { cancel() } }
             callback(eof)
         case .cancelled, .suspended: break
         }
@@ -88,7 +118,7 @@ public final class KqueueEventSource: EventSource {
             let response = kevent(kq, &event, 1, nil, 0, nil)
             if response < 0 {
                 let reason = String(cString: strerror(errno))
-                print("An error occured during KqueueEventSource.update: \(reason)")
+                fatalError("An error occured during KqueueEventSource.update: \(reason)")
             }
         }
     }

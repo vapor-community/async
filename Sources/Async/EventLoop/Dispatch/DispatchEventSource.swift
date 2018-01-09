@@ -31,4 +31,12 @@ public final class DispatchEventSource: EventSource {
         source.cancel()
         state = .cancelled
     }
+
+    deinit {
+        // must resume if suspended before deinitializing
+        switch state {
+        case .suspended: resume()
+        default: break
+        }
+    }
 }

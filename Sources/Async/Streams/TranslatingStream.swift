@@ -8,7 +8,7 @@ public protocol TranslatingStream {
 
     /// Convert the `Input` to `Output`.
     /// See `TranslatingStreamResult` for possible cases.
-    func translate(input: Input) -> TranslatingStreamResult<Output>
+    func translate(input: Input) throws -> TranslatingStreamResult<Output>
 }
 
 /// MARK: Stream
@@ -138,8 +138,18 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
             upstream?.request()
             return
         }
+        
+        let state: TranslatingStreamResult<Output>
+        
+        do {
+            state = try translator.translate(input: input)
+        } catch {
+            self.error(error)
+            self.close()
+            return
+        }
 
-        switch translator.translate(input: input) {
+        switch state {
         case .insufficient:
             /// the translator was unable to provide an output
             /// after consuming the entirety of the supplied input

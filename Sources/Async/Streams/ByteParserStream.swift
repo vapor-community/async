@@ -8,13 +8,10 @@ public protocol ByteParserStream: TranslatingStream where Input == UnsafeBufferP
     var state: ByteParserStreamState<Self> { get }
     
     /// Continues parsing a partially parsed Output
-    func continueParsing(_ partial: Partial, from buffer: Input) throws -> ByteParserResult<Partial, Output>
-    
-    /// Starts parsing Output, resulting in either a partially or fully completed Output
-    func startParsing(from buffer: Input) throws -> ByteParserResult<Partial, Output>
+    func parseBytes(from buffer: Input, partial: Partial?) throws -> ByteParserResult<Self>
 }
 
-public final class ByteParserStreamState<S: ByteParserStream> {
+public final class ByteParserStreamState<S> where S: ByteParserStream {
     /// The current eventloop, used to dispatch tasks (preventing stack overflows)
     fileprivate var eventloop: EventLoop
     
@@ -30,9 +27,9 @@ public final class ByteParserStreamState<S: ByteParserStream> {
     }
 }
 
-public enum ByteParserResult<Partial, Output> {
-    case uncompleted(Partial)
-    case completed(consuming: Int, result: Output)
+public enum ByteParserResult<S> where S: ByteParserStream {
+    case uncompleted(S.Partial)
+    case completed(consuming: Int, result: S.Output)
 }
 
 extension ByteParserStream {
@@ -44,13 +41,7 @@ extension ByteParserStream {
     public func translate(input: UnsafeBufferPointer<UInt8>) throws -> TranslatingStreamResult<Output> {
         self.state.parsedInput = 0
         
-        let state: ByteParserResult<Partial, Output>
-        
-        if let partiallyParsed = self.state.partiallyParsed {
-            state = try continueParsing(partiallyParsed, from: input)
-        } else {
-            state = try startParsing(from: input)
-        }
+        let state = try parseBytes(from: input, partial: self.state.partiallyParsed)
         
         switch state {
         case .uncompleted:

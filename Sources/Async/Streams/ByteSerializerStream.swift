@@ -1,7 +1,7 @@
 /// Serializes input into one or more `ByteBuffer`s
 ///
 /// Requires the sent ByteBuffer to be available asynchronously.
-public protocol ByteSerializerStream: Async.Stream, ConnectionContext where Output == UnsafeBufferPointer<UInt8> {
+public protocol ByteSerializerStream: TranslatingStream where Output == UnsafeBufferPointer<UInt8> {
     associatedtype SerializationState
     
     /// A serialization state that is used to keep track of unwritten `backlog` that has been inputted but couldn't yet be processed reactively.
@@ -14,7 +14,7 @@ public protocol ByteSerializerStream: Async.Stream, ConnectionContext where Outp
     /// The state provided is defined in the associated `SerializationState` and can be used to track incomplete write states
     ///
     /// Returns either a completely or incompletelyserialized state.
-    func serialize(_ input: Input, state: SerializationState?) -> ByteSerializerStreamResult<Self>
+    func serialize(_ input: Input, state: SerializationState?) throws -> ByteSerializerStreamResult<Self>
 }
 
 /// Indicates the progress in serializing the S.Input
@@ -25,32 +25,19 @@ public enum ByteSerializerStreamResult<S: ByteSerializerStream> {
 
 /// Keeps track of the states for `ByteSerializerStream`
 public final class ByteSerializerStreamState<S: ByteSerializerStream> {
-    /// The downstream to send output bytes to
-    fileprivate var downstream: AnyInputStream<UnsafeBufferPointer<UInt8>>?
-    
-    /// The upstream that is providing unserialized data
-    fileprivate var upstream: ConnectionContext?
-    
-    /// Remaining downstream demand
-    fileprivate var downstreamDemand: UInt
-    
     /// Keeps track of the `backlog`'s consumed data so it can be drained and cleaned up efficiently
     fileprivate var consumedBacklog: Int
     
     /// The backlog of `Input` to serialize
     fileprivate var backlog: [S.Input]
     
-    fileprivate var incompleteState: (S.Input, S.SerializationState)?
+    fileprivate var incompleteState: S.SerializationState?
     
     /// Unsets all values, cleaning up the state
     fileprivate func cancel() {
         // clean up
         backlog = []
-        downstreamDemand = 0
-        
-        // disconnect
-        downstream = nil
-        upstream = nil
+        consumedBacklog = 0
     }
     
     /// Cleans up the backlog
@@ -61,120 +48,27 @@ public final class ByteSerializerStreamState<S: ByteSerializerStream> {
         }
     }
     
-    /// Sends the buffer to downstream
-    fileprivate func send(_ buffer: UnsafeBufferPointer<UInt8>) {
-        downstream?.next(buffer)
-    }
-    
-    fileprivate var needMoreInput: Bool {
-        return backlog.count > consumedBacklog || incompleteState != nil
-    }
-    
     /// Creates a new state machine for `ByteSerializerStream` conformant types
     public init() {
-        downstreamDemand = 0
         backlog = []
         consumedBacklog = 0
     }
 }
 
 extension ByteSerializerStream {
-    /// See `ConnectionContext.connection`
-    public func connection(_ event: ConnectionEvent) {
-        switch event {
-        case .request(let amount):
-            state.downstreamDemand += amount
-            
-            defer {
-                state.cleanUpBacklog()
-            }
-            
-            // Serialized remainder backlog
-            while state.downstreamDemand > 0, state.needMoreInput {
-                // Decrement in advance to prevent bugs with recursive requesting
-                state.downstreamDemand -= 1
-                
-                let input: Input
-                let serializationState: SerializationState?
-                
-                if let incompleteState = state.incompleteState {
-                    input = incompleteState.0
-                    serializationState = incompleteState.1
-                } else {
-                    // Serialize the current backlog position
-                    input = state.backlog[state.consumedBacklog]
-                    serializationState = nil
-                    
-                    // Increment before sending, to prevent recursion bugs
-                    state.consumedBacklog += 1
-                }
-                
-                _serialize(input, state: serializationState)
-            }
-        case .cancel:
-            state.cancel()
-        }
-    }
-    
-    /// Internal helper that handles serializing input correctly and the processing of the results
-    fileprivate func _serialize(_ input: Input, state: SerializationState?) {
-        let result = self.serialize(input, state: state)
+    /// Translates the input by serializing it
+    public func translate(input: Input) throws -> TranslatingStreamResult<Output> {
+        let result = try self.serialize(input, state: self.state.incompleteState)
         
-        // send downstream
         switch result {
-        case .incomplete(let buffer, let serializationState):
-            self.state.incompleteState = (input, serializationState)
-            self.state.send(buffer)
         case .complete(let buffer):
-            self.state.send(buffer)
-        }
-    }
-    
-    /// See `InputStream.input`
-    public func input(_ event: InputEvent<Input>) {
-        switch event {
-        case .connect(let context):
-            state.upstream = context
-        case .close:
-            state.cancel()
-        case .error(let error):
-            state.downstream?.error(error)
-        case .next(let input):
-            self.queue(input)
-        }
-    }
-    
-    /// See `OutputStream.output`
-    public func output<S>(to inputStream: S) where S : InputStream, Self.Output == S.Input {
-        state.downstream = AnyInputStream(inputStream)
-        inputStream.connect(to: self)
-    }
-    
-    /// Queues a new input to the backlog and serializes the first input efficiently
-    fileprivate func queue(_ input: Input) {
-        guard state.downstreamDemand > 0 else {
-            state.backlog.append(input)
-            return
-        }
-        
-        let serializing: Input
-        
-        defer {
-            // Clean up the backlog buffer
-            state.cleanUpBacklog()
-        }
-        
-        if state.backlog.count > state.consumedBacklog {
-            // Append first, so the `next` doesn't trigger reading more data
-            state.backlog.append(input)
+            self.state.incompleteState = nil
             
-            serializing = state.backlog[state.consumedBacklog]
-        } else {
-            // Serialize without appending, saving performance
-            serializing = input
+            return .sufficient(buffer)
+        case .incomplete(let buffer, let state):
+            self.state.incompleteState = state
+            
+            return .excess(buffer)
         }
-        
-        // Serialize and send downstream
-        _serialize(serializing, state: nil)
     }
 }

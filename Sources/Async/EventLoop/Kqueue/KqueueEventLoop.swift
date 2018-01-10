@@ -18,6 +18,9 @@ public final class KqueueEventLoop: EventLoop {
 
     /// Async task to run
     private var task: AsyncCallback?
+    
+    /// Keeps track of all currently active sources
+    var sources: [KqueueEventSource]
 
     /// Create a new `KqueueEventLoop`
     public init(label: String) throws {
@@ -27,6 +30,7 @@ public final class KqueueEventLoop: EventLoop {
             throw EventLoopError(identifier: "kqueue", reason: "Could not create kqueue.")
         }
         self.kq = status
+        self.sources = []
 
         /// the maxiumum amount of events to handle per cycle
         let maxEvents = 4096
@@ -38,18 +42,30 @@ public final class KqueueEventLoop: EventLoop {
 
     /// See EventLoop.onReadable
     public func onReadable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
-        return KqueueEventSource(descriptor: descriptor, kq: kq, type: .read, callback: callback)
+        let source = KqueueEventSource(descriptor: descriptor, kq: kq, type: .read, callback: callback)
+        
+        self.sources.append(source)
+        
+        return source
     }
 
     /// See EventLoop.onWritable
     public func onWritable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
-        return KqueueEventSource(descriptor: descriptor, kq: kq, type: .write, callback: callback)
+        let source = KqueueEventSource(descriptor: descriptor, kq: kq, type: .write, callback: callback)
+        
+        self.sources.append(source)
+        
+        return source
     }
 
 
     /// See EventLoop.ononTimeout
     public func onTimeout(milliseconds: Int, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
-        return KqueueEventSource(descriptor: 1, kq: kq, type: .timer(timeout: milliseconds), callback: callback)
+        let source = KqueueEventSource(descriptor: 1, kq: kq, type: .timer(timeout: milliseconds), callback: callback)
+        
+        self.sources.append(source)
+        
+        return source
     }
 
     /// See EventLoop.async
@@ -62,6 +78,31 @@ public final class KqueueEventLoop: EventLoop {
 
         /// set the new task
         task = callback
+    }
+    
+    /// Removes cancelled sources and suspends suspending sources
+    fileprivate func cleanSources() {
+        var removedIndexes = [Int]()
+        var i = sources.count &- 1
+        
+        // Inverted scan to append sources in decrementing order
+        while i > 0 {
+            defer { i = i &- 1 }
+            
+            let source = sources[i]
+            
+            switch source.state {
+            case .cancelled:
+                removedIndexes.append(i)
+            case .suspending:
+                source.suspend()
+            default: break
+            }
+        }
+        
+        for index in removedIndexes {
+            sources.remove(at: index)
+        }
     }
 
     /// See EventLoop.run
@@ -76,6 +117,8 @@ public final class KqueueEventLoop: EventLoop {
             // in the process
             task()
         }
+        
+        cleanSources()
 
         // check for new events
         let eventCount = kevent(kq, nil, 0, eventlist.baseAddress, Int32(eventlist.count), nil)

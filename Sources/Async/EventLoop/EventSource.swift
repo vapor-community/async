@@ -1,5 +1,5 @@
 /// An event source created by an event loop.
-public protocol EventSource {
+public protocol EventSource: class {
     /// This source's current state
     var state: EventSourceState { get }
 
@@ -18,6 +18,13 @@ public enum EventSourceState {
     /// The source's handler will be called when
     /// there is new data.
     case resumed
+    
+    /// A state inbetween suspended and resumed.
+    ///
+    /// New data is being buffered or dropped by the system, but the state hasn't been suspended yet
+    ///
+    /// This state will change to suspended the next eventloop cycle unless new data has been buffered
+    case suspending
 
     /// New data is being buffered or dropped by the system.
     /// Your handler will not be called until resumed.

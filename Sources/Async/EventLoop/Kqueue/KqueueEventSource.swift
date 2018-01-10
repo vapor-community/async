@@ -11,7 +11,7 @@ internal enum KqueueEventSourceType {
 /// Kqueue based `EventSource` implementation.
 public final class KqueueEventSource: EventSource {
     /// See EventSource.state
-    public var state: EventSourceState
+    public private(set) var state: EventSourceState
 
     /// The underlying `kevent`.
     private var event: kevent
@@ -48,7 +48,7 @@ public final class KqueueEventSource: EventSource {
         let pointer = UnsafeMutablePointer<KqueueEventSource>.allocate(capacity: 1)
         event.udata = UnsafeMutableRawPointer(pointer)
 
-        state = .suspended
+        self.state = .suspended
         self.pointer = pointer
         self.event = event
         self.callback = callback
@@ -66,8 +66,12 @@ public final class KqueueEventSource: EventSource {
             fatalError("Called `.suspend()` on a suspended KqueueEventSource.")
         case .resumed:
             event.flags = UInt16(EV_ADD | EV_DISABLE)
+            state = .suspending
             update()
+        case .suspending:
+            event.flags = UInt16(EV_ADD | EV_DISABLE)
             state = .suspended
+            update()
         }
     }
 
@@ -76,7 +80,7 @@ public final class KqueueEventSource: EventSource {
         switch state {
         case .cancelled:
             fatalError("Called `.resume()` on a cancelled KqueueEventSource.")
-        case .suspended:
+        case .suspended, .suspending:
             event.flags = UInt16(EV_ADD | EV_ENABLE)
             update()
             state = .resumed
@@ -89,7 +93,7 @@ public final class KqueueEventSource: EventSource {
     public func cancel() {
         switch state {
         case .cancelled: fatalError("Called `.cancel()` on a cancelled KqueueEventSource.")
-        case .resumed, .suspended:
+        case .resumed, .suspended, .suspending:
             event.flags = UInt16(EV_DELETE)
             state = .cancelled
 
@@ -102,7 +106,7 @@ public final class KqueueEventSource: EventSource {
     /// Signals the event's callback.
     internal func signal(_ eof: Bool) {
         switch state {
-        case .resumed:
+        case .resumed, .suspending:
             if eof { defer { cancel() } }
             callback(eof)
         case .cancelled, .suspended: break
@@ -113,7 +117,7 @@ public final class KqueueEventSource: EventSource {
     /// Updates the `kevent` to the `kqueue` handle.
     private func update() {
         switch state {
-        case .cancelled: break
+        case .cancelled, .suspending: break
         case .resumed, .suspended:
             let response = kevent(kq, &event, 1, nil, 0, nil)
             if response < 0 {

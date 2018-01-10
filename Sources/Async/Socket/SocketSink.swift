@@ -82,16 +82,16 @@ public final class SocketSink<Socket>: InputStream
         let source = ensureWriteSource()
         switch source.state {
         case .cancelled, .resumed: break
-        case .suspended: source.resume()
+        case .suspending, .suspended: source.resume()
         }
     }
 
     /// Suspends writing data
-    private func suspendWriting() {
+    internal func suspendWriting() {
         let source = ensureWriteSource()
         switch source.state {
         case .cancelled, .suspended: break
-        case .resumed: source.suspend()
+        case .suspending, .resumed: source.suspend()
         }
     }
 
@@ -106,7 +106,7 @@ public final class SocketSink<Socket>: InputStream
         socketIsFull = false
 
         guard inputBuffer != nil else {
-            suspendWriting()
+            self.suspendWriting()
             upstream?.request()
             return
         }
@@ -139,7 +139,7 @@ public final class SocketSink<Socket>: InputStream
                 case input.count:
                     // wrote everything, suspend until we get more data to write
                     inputBuffer = nil
-                    suspendWriting()
+                    self.suspendWriting()
                     upstream?.request()
                 default:
                     written += count
@@ -160,10 +160,6 @@ public final class SocketSink<Socket>: InputStream
             return writeSource
         }
         return existing
-    }
-
-    /// Deallocated the pointer buffer
-    deinit {
     }
 }
 

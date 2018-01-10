@@ -55,7 +55,7 @@ extension ByteParser {
             self.state.parsedInput = self.state.parsedInput &+ consumed
             self.state.partiallyParsed = nil
             
-            if self.state.parsedInput == buffer.count {
+            if consumed == buffer.count {
                 self.state.parsedInput = 0
                 return .sufficient(result)
             }

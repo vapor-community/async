@@ -349,8 +349,6 @@ final class StreamTests : XCTestCase {
     }
     
     func testByteParserStream() throws {
-        let loop = try DefaultEventLoop(label: "codes.vapor.test.translating")
-        
         var cases: [[UInt8]] = [
             [0, 0],
             [0, 1],
@@ -371,6 +369,8 @@ final class StreamTests : XCTestCase {
             [2, 1]
         ]
         
+        let loop = try DefaultEventLoop(label: "codes.vapor.test.translating")
+        
         let parser = SimpleByteParser().stream(on: loop)
         let emitter = EmitterStream<UnsafeBufferPointer<UInt8>>()
         var offset = 0
@@ -385,7 +385,7 @@ final class StreamTests : XCTestCase {
             offset += 1
         }.finally {
             closed = true
-            XCTAssertEqual(cases.count, offset + 1)
+            XCTAssertEqual(cases.count, offset)
         }
         
         func emit(_ data: [UInt8]) {
@@ -410,7 +410,64 @@ final class StreamTests : XCTestCase {
     }
     
     func testByteSerializerStream() throws {
+        var cases: [[UInt8]] = [
+            [0, 0],
+            [0, 1],
+            [0, 2],
+            [0, 3],
+            [0, 4],
+            [4, 1],
+            [3, 1],
+            [2, 1],
+            [1, 1],
+            [0, 1],
+            [1, 2],
+            [2, 2],
+            [3, 2],
+            [4, 2],
+            [0, 1],
+            [4, 3],
+            [2, 1]
+        ]
         
+        let loop = try DefaultEventLoop(label: "codes.vapor.test.translating")
+        
+        let serializer = SimpleByteSerializer().stream(on: loop)
+        let parser = SimpleByteParser().stream(on: loop)
+        let emitter = EmitterStream<[[UInt8]]>()
+        
+        var offset = 0
+        var closed = false
+        
+        emitter.stream(to: serializer).output(to: parser)
+        
+        parser.drain { upstream in
+            upstream.request(count: .max)
+        }.output { buffer in
+            XCTAssertEqual(buffer, cases[offset])
+            offset += 1
+        }.finally {
+            closed = true
+            XCTAssertEqual(cases.count, offset)
+        }
+        
+        var sent = 0
+        var size = 1
+        
+        while cases.count > sent {
+            let consume = min(cases.count - sent, size)
+            
+            let serialize = Array(cases[sent..<sent + consume])
+            
+            size += 1
+            sent += consume
+            
+            emitter.emit(serialize)
+        }
+        
+        emitter.close()
+        
+        XCTAssert(closed)
     }
 
     static let allTests = [
@@ -456,6 +513,40 @@ fileprivate final class SimpleByteParser: ByteParser {
                 return .completed(consuming: 2, result: [buffer[0], buffer[1]])
             } else {
                 return .uncompleted(buffer[0])
+            }
+        }
+    }
+}
+
+fileprivate final class SimpleByteSerializer: ByteSerializer {
+    var state: ByteSerializerState<SimpleByteSerializer>
+    
+    typealias SerializationState = Int
+    typealias Input = [[UInt8]]
+    typealias Output = UnsafeBufferPointer<UInt8>
+    
+    var serializing = [UInt8]()
+    
+    init() {
+        state = .init()
+    }
+    
+    func serialize(_ input: Input, state: Int?) throws -> ByteSerializerResult<SimpleByteSerializer> {
+        var state = state ?? 0
+        
+        guard input.count > state else {
+            struct SomeError: Error {}
+            throw SomeError()
+        }
+        
+        self.serializing = input[state]
+        state = state + 1
+        
+        return serializing.withUnsafeBufferPointer { (buffer: UnsafeBufferPointer<UInt8>) in
+            if input.count == state {
+                return .complete(buffer)
+            } else {
+                return .incomplete(buffer, state: state)
             }
         }
     }

@@ -43,9 +43,12 @@ extension ByteParserStream {
     ///
     /// When output has been achieved, the remainder of the input buffer will be left unused until more output is requested.
     public func translate(input: UnsafeBufferPointer<UInt8>) throws -> TranslatingStreamResult<Output> {
-        self.state.parsedInput = 0
+        let buffer = UnsafeBufferPointer<UInt8>(
+            start: input.baseAddress?.advanced(by: self.state.parsedInput),
+            count: input.count - self.state.parsedInput
+        )
         
-        let state = try parseBytes(from: input, partial: self.state.partiallyParsed)
+        let state = try parseBytes(from: buffer, partial: self.state.partiallyParsed)
         
         switch state {
         case .uncompleted:

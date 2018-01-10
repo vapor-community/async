@@ -25,34 +25,10 @@ public enum ByteSerializerStreamResult<S: ByteSerializerStream> {
 
 /// Keeps track of the states for `ByteSerializerStream`
 public final class ByteSerializerStreamState<S: ByteSerializerStream> {
-    /// Keeps track of the `backlog`'s consumed data so it can be drained and cleaned up efficiently
-    fileprivate var consumedBacklog: Int
-    
-    /// The backlog of `Input` to serialize
-    fileprivate var backlog: [S.Input]
-    
     fileprivate var incompleteState: S.SerializationState?
     
-    /// Unsets all values, cleaning up the state
-    fileprivate func cancel() {
-        // clean up
-        backlog = []
-        consumedBacklog = 0
-    }
-    
-    /// Cleans up the backlog
-    fileprivate func cleanUpBacklog() {
-        if consumedBacklog > 0 {
-            backlog.removeFirst(consumedBacklog)
-            consumedBacklog = 0
-        }
-    }
-    
     /// Creates a new state machine for `ByteSerializerStream` conformant types
-    public init() {
-        backlog = []
-        consumedBacklog = 0
-    }
+    public init() {}
 }
 
 extension ByteSerializerStream {

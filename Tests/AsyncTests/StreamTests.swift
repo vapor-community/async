@@ -285,7 +285,6 @@ final class StreamTests : XCTestCase {
         let count = 10_000
         let exp = expectation(description: "\(count) chunks")
 
-
         stream.drain { req in
             upstream = req
         }.output { chunk in
@@ -298,15 +297,120 @@ final class StreamTests : XCTestCase {
         }.catch { error in
             XCTFail("\(error)")
         }.finally {
-            print("closed")
+            XCTFail("Never closed")
         }
 
         upstream?.request()
 
-        let huge = [Int].init(repeating: 5, count: count * 2)
+        let huge = [Int](repeating: 5, count: count * 2)
         emitter.emit(huge)
 
         waitForExpectations(timeout: 30)
+    }
+    
+    func testPushStream() throws {
+        var ints = [0, 1, 6, 1, 3, 5, 1, 9, 3, 7, 5, 1, 3, 2]
+        
+        var drainOffset = 0
+        var closed = false
+        
+        let pushStream = PushStream<Int>()
+        let drainStream = DrainStream<Int>(onInput: { input in
+            XCTAssertEqual(ints[drainOffset], input)
+            drainOffset += 1
+        }, onClose: {
+            closed = true
+        })
+        
+        pushStream.output(to: drainStream)
+        
+        for int in ints {
+            pushStream.next(int)
+        }
+        
+        pushStream.request()
+        XCTAssertEqual(drainOffset, 1)
+        
+        pushStream.request(count: 2)
+        XCTAssertEqual(drainOffset, 3)
+        
+        ints.append(4)
+        pushStream.next(4)
+        
+        pushStream.request(count: .max)
+        XCTAssertEqual(drainOffset, ints.count)
+        
+        ints.append(5)
+        pushStream.next(5)
+        XCTAssertEqual(drainOffset, ints.count)
+        
+        pushStream.close()
+        XCTAssert(closed)
+    }
+    
+    func testByteParserStream() throws {
+        let loop = try DefaultEventLoop(label: "codes.vapor.test.translating")
+        
+        var cases: [[UInt8]] = [
+            [0, 0],
+            [0, 1],
+            [0, 2],
+            [0, 3],
+            [0, 4],
+            [4, 1],
+            [3, 1],
+            [2, 1],
+            [1, 1],
+            [0, 1],
+            [1, 2],
+            [2, 2],
+            [3, 2],
+            [4, 2],
+            [0, 1],
+            [4, 3],
+            [2, 1]
+        ]
+        
+        let parser = SimpleByteParser().stream(on: loop)
+        let emitter = EmitterStream<UnsafeBufferPointer<UInt8>>()
+        var offset = 0
+        var closed = false
+        
+        emitter.output(to: parser)
+        
+        parser.drain { upstream in
+            upstream.request(count: .max)
+        }.output { buffer in
+            XCTAssertEqual(buffer, cases[offset])
+            offset += 1
+        }.finally {
+            closed = true
+            XCTAssertEqual(cases.count, offset + 1)
+        }
+        
+        func emit(_ data: [UInt8]) {
+            data.withUnsafeBufferPointer(emitter.emit)
+        }
+        
+        var data = cases.reduce([], +)
+        var size = 0
+        
+        while data.count > 0 {
+            let consume = min(data.count, size)
+            
+            emit(Array(data[..<consume]))
+            
+            data.removeFirst(consume)
+            size += 1
+        }
+        
+        emitter.close()
+        
+        XCTAssert(closed)
+    }
+    
+    func testByteSerializerStream() throws {
+        
     }
 
     static let allTests = [
@@ -316,11 +420,46 @@ final class StreamTests : XCTestCase {
         ("testCloseChaining", testCloseChaining),
         ("testTranslatingStream", testTranslatingStream),
         ("testTranslatingStreamOverflow", testTranslatingStreamOverflow),
+        ("testPushStream", testPushStream),
+        ("testPushStream", testPushStream),
+        ("testPushStream", testPushStream),
     ]
 }
 
 
 /// MARK: Utilities
+
+fileprivate final class SimpleByteParser: ByteParser {
+    var state: ByteParserState<SimpleByteParser>
+    
+    typealias Input = UnsafeBufferPointer<UInt8>
+    typealias Output = [UInt8]
+    typealias Partial = UInt8?
+    
+    init() {
+        self.state = .init()
+    }
+    
+    func parseBytes(from buffer: SimpleByteParser.Input, partial: SimpleByteParser.Partial?) throws -> ByteParserResult<SimpleByteParser> {
+        if let partial = partial, let partialByte = partial {
+            guard buffer.count >= 1 else {
+                return .uncompleted(partialByte)
+            }
+            
+            return .completed(consuming: 1, result: [partialByte, buffer[0]])
+        } else {
+            guard buffer.count >= 1 else {
+                return .uncompleted(nil)
+            }
+            
+            if buffer.count >= 2 {
+                return .completed(consuming: 2, result: [buffer[0], buffer[1]])
+            } else {
+                return .uncompleted(buffer[0])
+            }
+        }
+    }
+}
 
 fileprivate enum ArrayChunkingStreamState<S> {
     case ready

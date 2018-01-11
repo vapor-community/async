@@ -5,7 +5,8 @@ import Foundation
 public protocol FileReader {
     /// Reads the file at the supplied path
     /// Supply a queue to complete the future on.
-    func read(at path: String, chunkSize: Int) -> AnyOutputStream<UnsafeBufferPointer<UInt8>>
+    func read<S>(at path: String, into stream: S, chunkSize: Int)
+    where S: Async.InputStream, S.Input == UnsafeBufferPointer<UInt8>
 
     /// Returns true if the file exists at the supplied path.
     func fileExists(at path: String) -> Bool
@@ -20,18 +21,19 @@ extension FileReader {
         let promise = Promise(Data.self)
 
         var data = Data()
-        let stream = self.read(at: path, chunkSize: chunkSize)
         var upstream: ConnectionContext?
         
-        stream.drain { _upstream in
+        let stream = DrainStream(UnsafeBufferPointer<UInt8>.self, onConnect: { _upstream in
             upstream = _upstream
-        }.output { buffer in
+        }, onInput: { buffer in
             let extraData = Data(bytes: buffer.baseAddress!, count: buffer.count)
             data.append(extraData)
             upstream?.request()
-        }.catch(onError: promise.fail).finally {
+        }, onError: promise.fail, onClose: {
             promise.complete(data)
-        }
+        })
+        
+        self.read(at: path, into: stream, chunkSize: chunkSize)
         
         upstream?.request()
         

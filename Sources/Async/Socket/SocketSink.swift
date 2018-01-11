@@ -106,8 +106,8 @@ public final class SocketSink<Socket>: InputStream
         socketIsFull = false
 
         guard inputBuffer != nil else {
-            upstream?.request()
             suspendWriting()
+            upstream?.request()
             return
         }
 

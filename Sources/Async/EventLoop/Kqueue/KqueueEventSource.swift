@@ -65,13 +65,8 @@ public final class KqueueEventSource: EventSource {
         case .suspended:
             fatalError("Called `.suspend()` on a suspended KqueueEventSource.")
         case .resumed:
-            event.flags = UInt16(EV_ADD | EV_DISABLE)
-            state = .suspending
-            update()
-        case .suspending:
-            event.flags = UInt16(EV_ADD | EV_DISABLE)
-            state = .suspended
-            update()
+            // Not necessary
+            break
         }
     }
 
@@ -80,7 +75,7 @@ public final class KqueueEventSource: EventSource {
         switch state {
         case .cancelled:
             fatalError("Called `.resume()` on a cancelled KqueueEventSource.")
-        case .suspended, .suspending:
+        case .suspended:
             event.flags = UInt16(EV_ADD | EV_ENABLE)
             update()
             state = .resumed
@@ -93,20 +88,20 @@ public final class KqueueEventSource: EventSource {
     public func cancel() {
         switch state {
         case .cancelled: fatalError("Called `.cancel()` on a cancelled KqueueEventSource.")
-        case .resumed, .suspended, .suspending:
+        case .resumed, .suspended:
             event.flags = UInt16(EV_DELETE)
             state = .cancelled
 
             // deallocate reference to self
-            pointer.deallocate(capacity: 1)
             pointer.deinitialize()
+            pointer.deallocate(capacity: 1)
         }
     }
 
     /// Signals the event's callback.
     internal func signal(_ eof: Bool) {
         switch state {
-        case .resumed, .suspending:
+        case .resumed:
             if eof { defer { cancel() } }
             callback(eof)
         case .cancelled, .suspended: break
@@ -117,7 +112,7 @@ public final class KqueueEventSource: EventSource {
     /// Updates the `kevent` to the `kqueue` handle.
     private func update() {
         switch state {
-        case .cancelled, .suspending: break
+        case .cancelled: break
         case .resumed, .suspended:
             let response = kevent(kq, &event, 1, nil, 0, nil)
             if response < 0 {

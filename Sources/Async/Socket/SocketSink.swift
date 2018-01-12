@@ -35,6 +35,7 @@ public final class SocketSink<Socket>: InputStream
     private var socketIsFull: Bool
 
     internal init(socket: Socket, on worker: Worker) {
+        // print("\(type(of: self)).\(#function)")
         self.socket = socket
         self.eventLoop = worker.eventLoop
         // Allocate one TCP packet
@@ -48,6 +49,7 @@ public final class SocketSink<Socket>: InputStream
 
     /// See InputStream.input
     public func input(_ event: InputEvent<UnsafeBufferPointer<UInt8>>) {
+        // print("\(type(of: self)).\(#function)")
         switch event {
         case .next(let input):
             /// crash if the upstream is illegally overproducing data
@@ -72,12 +74,14 @@ public final class SocketSink<Socket>: InputStream
 
     /// Cancels reading
     public func close() {
+        // print("\(type(of: self)).\(#function)")
         socket.close()
         writeSource = nil
         upstream = nil
     }
 
     private func update() {
+        // print("\(type(of: self)).\(#function)")
         guard inputBuffer != nil else {
             upstream?.request()
             return
@@ -90,18 +94,19 @@ public final class SocketSink<Socket>: InputStream
 
     /// Writes the buffered data to the socket.
     private func writeData() {
+        // print("\(type(of: self)).\(#function)")
         // ensure socket is prepared
         guard socket.isPrepared else {
             do {
                 try socket.prepareSocket()
             } catch {
-                /// FIXME: handle better
-                print(error)
+                fatalError("\(error)")
             }
             return
         }
 
         guard let input = inputBuffer else {
+            // print(DefaultEventLoop.current.label)
             fatalError("\(#function) called while inputBuffer is nil")
         }
 
@@ -112,27 +117,26 @@ public final class SocketSink<Socket>: InputStream
             )
             
             let write = try socket.write(from: buffer)
+            // print("    write: \(write)")
             switch write {
             case .wrote(let count):
                 switch count + written {
-                case input.count:
-                    // wrote everything, suspend until we get more data to write
-                    inputBuffer = nil
-                    upstream?.request()
-                default:
-                    written += count
+                case input.count: inputBuffer = nil
+                default: written += count
                 }
             case .wouldBlock:
                 socketIsFull = true
             }
         } catch {
-            /// FIXME: handle better
-            print("Uncaught Error: \(error)")
+            fatalError("\(error)")
         }
+
+        update()
     }
 
     /// Called when the write source signals.
     private func writeSourceSignal(isCancelled: Bool) {
+        // print("\(type(of: self)).\(#function): \(isCancelled)")
         guard !isCancelled else {
             close()
             return

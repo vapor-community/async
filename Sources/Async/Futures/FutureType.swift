@@ -36,7 +36,7 @@ extension Future {
     /// Will *not* be executed if an error occurrs
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/promise-future-introduction/#on-future-completion)
-    public func `do`(_ callback: @escaping ExpectationCallback) -> Self {
+    public func `do`(_ callback: @escaping ExpectationCallback) -> Future<T> {
         addAwaiter { result in
             guard let ex = result.expectation else {
                 return
@@ -123,7 +123,7 @@ extension Future {
     /// Get called back whenever the future is complete,
     /// ignoring the result.
     @discardableResult
-    public func always(_ callback: @escaping AlwaysCallback) -> Self {
+    public func always(_ callback: @escaping AlwaysCallback) -> Future<T> {
         addAwaiter { _ in
             callback()
         }
@@ -189,14 +189,23 @@ extension Future {
     ///
     /// This allows you to convert any non-throwing, future-return method into a
     /// closure that accepts throwing and returns a future.
-    public convenience init(_ callback: @escaping () throws -> Future<Expectation>) {
-        self.init()
+    public init(_ callback: @escaping () throws -> Future<Expectation>) {
+        let promise = Promise<Expectation>()
         
         do {
-            try callback().addAwaiter(callback: self.complete)
+            try callback().addAwaiter { result in
+                switch result {
+                case .error(let error):
+                    promise.fail(error)
+                case .expectation(let expectation):
+                    promise.complete(expectation)
+                }
+            }
         } catch {
-            self.complete(with: .error(error))
+            promise.fail(error)
         }
+        
+        self = promise.future
     }
 }
 

@@ -18,7 +18,7 @@ public final class KqueueEventLoop: EventLoop {
 
     /// Async task to run
     private var task: AsyncCallback?
-
+    
     /// Create a new `KqueueEventLoop`
     public init(label: String) throws {
         self.label = label
@@ -63,7 +63,7 @@ public final class KqueueEventLoop: EventLoop {
         /// set the new task
         task = callback
     }
-
+    
     /// See EventLoop.run
     public func run() {
         // while tasks are available, run them

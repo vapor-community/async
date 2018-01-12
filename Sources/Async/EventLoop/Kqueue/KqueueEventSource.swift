@@ -11,7 +11,7 @@ internal enum KqueueEventSourceType {
 /// Kqueue based `EventSource` implementation.
 public final class KqueueEventSource: EventSource {
     /// See EventSource.state
-    public var state: EventSourceState
+    public private(set) var state: EventSourceState
 
     /// The underlying `kevent`.
     private var event: kevent
@@ -43,12 +43,12 @@ public final class KqueueEventSource: EventSource {
             event.data = timeout
         }
         event.ident = UInt(descriptor)
-        event.flags = UInt16(EV_ADD | EV_DISABLE)
+        event.flags = UInt16(EV_ADD | EV_DISABLE | EV_CLEAR)
 
         let pointer = UnsafeMutablePointer<KqueueEventSource>.allocate(capacity: 1)
         event.udata = UnsafeMutableRawPointer(pointer)
 
-        state = .suspended
+        self.state = .suspended
         self.pointer = pointer
         self.event = event
         self.callback = callback
@@ -65,9 +65,8 @@ public final class KqueueEventSource: EventSource {
         case .suspended:
             fatalError("Called `.suspend()` on a suspended KqueueEventSource.")
         case .resumed:
-            event.flags = UInt16(EV_ADD | EV_DISABLE)
-            update()
-            state = .suspended
+            // Not necessary
+            break
         }
     }
 
@@ -77,7 +76,7 @@ public final class KqueueEventSource: EventSource {
         case .cancelled:
             fatalError("Called `.resume()` on a cancelled KqueueEventSource.")
         case .suspended:
-            event.flags = UInt16(EV_ADD | EV_ENABLE)
+            event.flags = UInt16(EV_ADD | EV_ENABLE | EV_CLEAR)
             update()
             state = .resumed
         case .resumed:
@@ -94,8 +93,8 @@ public final class KqueueEventSource: EventSource {
             state = .cancelled
 
             // deallocate reference to self
-            pointer.deallocate(capacity: 1)
             pointer.deinitialize()
+            pointer.deallocate(capacity: 1)
         }
     }
 

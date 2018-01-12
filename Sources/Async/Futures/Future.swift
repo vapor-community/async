@@ -8,86 +8,106 @@ import Dispatch
 /// A future can also contain an error, rather than a result.
 ///
 /// [Learn More →](https://docs.vapor.codes/3.0/async/promise-future-introduction/)
-public final class Future<T>: FutureType {
+public struct Future<T>: FutureType {
     /// Future expectation type
     public typealias Expectation = T
+    
+    enum Storage {
+        case completed(Result)
+        case promise(Promise<T>)
+    }
 
     /// The future's result will be stored
     /// here when it is resolved.
-    private var result: Result?
-
-    /// Contains information about callbacks
-    /// waiting for this future to complete
-    private struct Awaiter {
-        let callback: ResultCallback
-    }
-
-    /// A list of all handlers waiting to 
-    private var awaiters: [Awaiter]
-
-    /// Creates a new, uncompleted, unprovoked future
-    /// Can only be created by a Promise, so this is hidden
-    internal init() {
-        awaiters = []
-        result = nil
-    }
+    private var storage: Storage
 
     /// Pre-filled promise future
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/promise-future-introduction/#futures-without-promise)
-    public convenience init(_ result: T) {
-        self.init()
-        self.result = .expectation(result)
+    public init(_ result: T) {
+        self.storage = .completed(.expectation(result))
     }
 
     /// Pre-filled failed promise
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/promise-future-introduction/#futures-without-promise)
-    public convenience init(error: Error) {
-        self.init()
-        self.result = .error(error)
+    public init(error: Error) {
+        self.storage = .completed(.error(error))
+    }
+    
+    internal init(referring promise: Promise<T>) {
+        self.storage = .promise(promise)
     }
     
     /// `true` if the future is already completed.
     public var isCompleted: Bool {
-        return result != nil
+        switch storage {
+        case .completed(_): return true
+        case .promise(let promise): return promise.isCompleted
+        }
     }
 
     /// Awaits the expectation without blocking other tasks
     /// on the `EventLoop`.
     public func await(on worker: Worker) throws -> Expectation {
-        while result == nil {
-            worker.eventLoop.run()
+        let result: Result
+        
+        switch storage {
+        case .completed(let completed):
+            result = completed
+        case .promise(let promise):
+            while promise.result == nil {
+                worker.eventLoop.run()
+            }
+            
+            result = promise.result!
         }
-        switch result! {
+        
+        switch result {
         case .error(let error): throw error
         case .expectation(let exp): return exp
         }
     }
-
-    /// Completes the result, notifying awaiters.
-    internal func complete(with result: Result) {
-        guard self.result == nil else {
-            return
+    
+    /// Asserts the future is completed and the result must be returned now
+    ///
+    /// Throws an error if the future wasn't completed or contains an error
+    public func assertCompleted() throws -> Expectation {
+        let result: Result
+        
+        switch storage {
+        case .completed(let completed):
+            result = completed
+        case .promise(let promise):
+            guard let promiseResult = promise.result else {
+                throw UncompletedFuture()
+            }
+            
+            result = promiseResult
         }
-        self.result = result
-
-        for awaiter in awaiters {
-            awaiter.callback(result)
+        
+        switch result {
+        case .error(let error): throw error
+        case .expectation(let exp): return exp
         }
-        // release the awaiters to prevent retain cycles
-        awaiters = []
     }
 
     /// Locked method for adding an awaiter
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/advanced-futures/#adding-awaiters-to-all-results)
     public func addAwaiter(callback: @escaping ResultCallback) {
-        if let result = self.result {
+        switch storage {
+        case .completed(let result):
             callback(result)
-        } else {
-            let awaiter = Awaiter(callback: callback)
-            awaiters.append(awaiter)
+        case .promise(let promise):
+            if let result = promise.result {
+                callback(result)
+            } else {
+                promise.awaiters.append(.init(callback: callback))
+            }
         }
     }
 }
+
+/// Thrown when a future is asserted as completed but wasn't completed
+fileprivate struct UncompletedFuture: Error {}

@@ -440,8 +440,13 @@ fileprivate final class SimpleByteParser: ByteParser {
     init() {
         self.state = .init()
     }
+
+    func parseBytes(from buffer: SimpleByteParser.Input, partial: SimpleByteParser.Partial?) throws -> Future<ByteParserResult<SimpleByteParser>> {
+        return try Future(_parseBytes(from: buffer, partial: partial))
+    }
     
-    func parseBytes(from buffer: SimpleByteParser.Input, partial: SimpleByteParser.Partial?) throws -> ByteParserResult<SimpleByteParser> {
+    private func _parseBytes(from buffer: SimpleByteParser.Input, partial: SimpleByteParser.Partial?) throws -> ByteParserResult<SimpleByteParser> {
+
         if let partial = partial, let partialByte = partial {
             guard buffer.count >= 1 else {
                 return .uncompleted(partialByte)

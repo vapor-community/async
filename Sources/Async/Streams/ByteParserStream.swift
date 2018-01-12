@@ -9,7 +9,7 @@ public protocol ByteParser: TranslatingStream where Input == UnsafeBufferPointer
     var state: ByteParserState<Self> { get }
     
     /// Continues parsing a partially parsed Output
-    func parseBytes(from buffer: Input, partial: Partial?) throws -> ByteParserResult<Self>
+    func parseBytes(from buffer: Input, partial: Partial?) throws -> Future<ByteParserResult<Self>>
 }
 
 /// Keeps track of variables that are related to the parsing process
@@ -45,22 +45,24 @@ extension ByteParser {
         )
         
         let state = try parseBytes(from: buffer, partial: self.state.partiallyParsed)
-        
-        switch state {
-        case .uncompleted(let partial):
-            self.state.partiallyParsed = partial
-            self.state.parsedInput = 0
-            return Future(.insufficient)
-        case .completed(let consumed, let result):
-            self.state.parsedInput = self.state.parsedInput &+ consumed
-            self.state.partiallyParsed = nil
-            
-            if consumed == buffer.count {
+
+        return state.map(to: TranslatingStreamResult<Output>.self) { state in
+            switch state {
+            case .uncompleted(let partial):
+                self.state.partiallyParsed = partial
                 self.state.parsedInput = 0
-                return Future(.sufficient(result))
+                return .insufficient
+            case .completed(let consumed, let result):
+                self.state.parsedInput = self.state.parsedInput &+ consumed
+                self.state.partiallyParsed = nil
+
+                if consumed == buffer.count {
+                    self.state.parsedInput = 0
+                    return .sufficient(result)
+                }
+
+                return .excess(result)
             }
-            
-            return Future(.excess(result))
         }
     }
 }

@@ -27,15 +27,10 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
     /// A strong reference to the current eventloop
     private var eventLoop: EventLoop
 
-    /// True if the socket has returned that it would block
-    /// on the previous call
-    private var socketIsEmpty: Bool
-
     internal init(socket: Socket, on worker: Worker) {
         self.socket = socket
         self.eventLoop = worker.eventLoop
         self.requestedOutputRemaining = 0
-        self.socketIsEmpty = true
         let capacity = 4096
         self.buffer = .init(start: .allocate(capacity: capacity), count: capacity)
         let readSource = self.eventLoop.onReadable(descriptor: socket.descriptor, readSourceSignal)
@@ -55,7 +50,6 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
         case .request(let count):
             assert(count == 1)
             requestedOutputRemaining += count
-            update()
         case .cancel: close()
         }
     }
@@ -64,7 +58,7 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
     public func close() {
         socket.close()
         downstream?.close()
-        readSource = nil
+        // readSource = nil
         downstream = nil
     }
 
@@ -73,9 +67,7 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
             return
         }
 
-        if !socketIsEmpty {
-            readData()
-        }
+        readData()
     }
 
     /// Reads data and outputs to the output stream
@@ -97,7 +89,7 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
             read = try socket.read(into: buffer)
         } catch {
             // any errors that occur here cannot be thrown,
-            //selfso send them to stream error catcher.
+            // so send them to stream error catcher.
             downstream?.error(error)
             return
         }
@@ -110,12 +102,10 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
             }
 
             let view = UnsafeBufferPointer<UInt8>(start: buffer.baseAddress, count: count)
+            requestedOutputRemaining -= 1
             downstream!.next(view)
-        case .wouldBlock:
-            socketIsEmpty = true
+        case .wouldBlock: fatalError()
         }
-
-        update()
     }
 
     /// Called when the read source signals.
@@ -124,7 +114,6 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
             close()
             return
         }
-        socketIsEmpty = false
         update()
     }
 

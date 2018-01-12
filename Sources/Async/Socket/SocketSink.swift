@@ -10,6 +10,9 @@ public final class SocketSink<Socket>: InputStream
 
     /// The client stream's underlying socket.
     public var socket: Socket
+    
+    /// Indicates if the socket is currently able to write data
+    fileprivate var writable: Bool
 
     /// Data being fed into the client stream is stored here.
     private var inputBuffer: UnsafeBufferPointer<UInt8>? {
@@ -30,16 +33,12 @@ public final class SocketSink<Socket>: InputStream
     /// A strong reference to the current eventloop
     private var eventLoop: EventLoop
 
-    /// True if the socket has returned that it would block
-    /// on the previous call
-    private var socketIsFull: Bool
-
     internal init(socket: Socket, on worker: Worker) {
         self.socket = socket
         self.eventLoop = worker.eventLoop
         // Allocate one TCP packet
         self.inputBuffer = nil
-        self.socketIsFull = false
+        self.writable = false
         self.written = 0
         let writeSource = self.eventLoop.onWritable(descriptor: socket.descriptor, writeSourceSignal)
         writeSource.resume()
@@ -56,17 +55,16 @@ public final class SocketSink<Socket>: InputStream
             }
 
             inputBuffer = input
+            
             update()
         case .connect(let connection):
             upstream = connection
-            if !socketIsFull {
-                update()
-            }
+            update()
         case .close:
             close()
         case .error(let e):
-            print("Uncaught Error: \(e)")
             close()
+            fatalError("\(e)")
         }
     }
 
@@ -79,13 +77,12 @@ public final class SocketSink<Socket>: InputStream
 
     private func update() {
         guard inputBuffer != nil else {
+            self.writable = true
             upstream?.request()
             return
         }
 
-        if !socketIsFull {
-            writeData()
-        }
+        writeData()
     }
 
     /// Writes the buffered data to the socket.
@@ -95,8 +92,7 @@ public final class SocketSink<Socket>: InputStream
             do {
                 try socket.prepareSocket()
             } catch {
-                /// FIXME: handle better
-                print(error)
+                fatalError("\(error)")
             }
             return
         }
@@ -112,23 +108,22 @@ public final class SocketSink<Socket>: InputStream
             )
             
             let write = try socket.write(from: buffer)
+            
+            self.writable = false
+            
             switch write {
             case .wrote(let count):
                 switch count + written {
-                case input.count:
-                    // wrote everything, suspend until we get more data to write
-                    inputBuffer = nil
-                    upstream?.request()
-                default:
-                    written += count
+                case input.count: inputBuffer = nil
+                default: written += count
                 }
-            case .wouldBlock:
-                socketIsFull = true
+            case .wouldBlock: fatalError()
             }
         } catch {
-            /// FIXME: handle better
-            print("Uncaught Error: \(error)")
+            fatalError("\(error)")
         }
+
+        update()
     }
 
     /// Called when the write source signals.
@@ -137,7 +132,7 @@ public final class SocketSink<Socket>: InputStream
             close()
             return
         }
-        socketIsFull = false
+        
         update()
     }
 }

@@ -43,7 +43,6 @@ public final class KqueueEventSource: EventSource {
             event.data = timeout
         }
         event.ident = UInt(descriptor)
-        event.flags = UInt16(EV_ADD | EV_DISABLE | EV_CLEAR)
 
         let pointer = UnsafeMutablePointer<KqueueEventSource>.allocate(capacity: 1)
         event.udata = UnsafeMutableRawPointer(pointer)
@@ -65,7 +64,9 @@ public final class KqueueEventSource: EventSource {
         case .suspended:
             fatalError("Called `.suspend()` on a suspended KqueueEventSource.")
         case .resumed:
-            // Not necessary
+            event.flags = UInt16(EV_ADD | EV_DISABLE)
+            update()
+            state = .suspended
             break
         }
     }
@@ -102,7 +103,11 @@ public final class KqueueEventSource: EventSource {
     internal func signal(_ eof: Bool) {
         switch state {
         case .resumed:
-            if eof { defer { cancel() } }
+            defer {
+                if eof {
+                    cancel()
+                }
+            }
             callback(eof)
         case .cancelled, .suspended: break
         }

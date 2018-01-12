@@ -106,19 +106,8 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
             upstream = nil
             downstream = nil
         case .request(let count):
-            if recursionDepth >= 64 {
-                /// if we have exceeded the max recursion depth,
-                /// dispatch the next update asynchronously
-                eventLoop.async {
-                    self.downstreamDemand += count
-                    self.recursionDepth = 0
-                    self.update()
-                }
-            } else {
-                downstreamDemand += count
-                recursionDepth += 1
-                update()
-            }
+            downstreamDemand += count
+            update()
         }
     }
 

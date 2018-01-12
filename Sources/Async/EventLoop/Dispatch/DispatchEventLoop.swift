@@ -2,6 +2,7 @@ import Dispatch
 import Foundation
 
 /// Dispatch based `EventLoop` implementation.
+@available(*, unavailable, renamed: "DefaultEventLoop")
 public final class DispatchEventLoop: EventLoop {
     /// See EventLoop.Source
     public typealias Source = DispatchEventSource

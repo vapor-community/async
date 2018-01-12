@@ -39,9 +39,9 @@ public protocol EventLoop: Worker {
     /// Creates a new timer event source.
     /// This callback will be called perodically when the timeout is reached.
     func onTimeout(milliseconds: Int, _ callback: @escaping EventLoop.EventCallback) -> EventSource
-
-    /// Sets the closure to be run async.
-    func async(_ callback: @escaping AsyncCallback)
+    
+    /// Dispatches a task to this EventLoop
+    func async(_ callback: @escaping EventLoop.AsyncCallback)
 
     /// Runs a single cycle for this event loop.
     /// Call `EventLoop.runLoop()` to run indefinitely.

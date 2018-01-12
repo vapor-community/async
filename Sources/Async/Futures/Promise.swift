@@ -48,7 +48,7 @@ public final class Promise<T> {
     }
     
     /// Completes the result, notifying awaiters.
-    internal func complete(with result: FutureResult<T>) {
+    fileprivate func complete(with result: FutureResult<T>) {
         guard self.result == nil else {
             return
         }

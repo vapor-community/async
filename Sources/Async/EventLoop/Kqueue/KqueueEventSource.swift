@@ -67,7 +67,6 @@ public final class KqueueEventSource: EventSource {
             event.flags = UInt16(EV_ADD | EV_DISABLE)
             update()
             state = .suspended
-            break
         }
     }
 

@@ -27,12 +27,11 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
     /// A strong reference to the current eventloop
     private var eventLoop: EventLoop
 
-    internal init(socket: Socket, on worker: Worker) {
+    internal init(socket: Socket, on worker: Worker, bufferSize: Int) {
         self.socket = socket
         self.eventLoop = worker.eventLoop
         self.requestedOutputRemaining = 0
-        let capacity = 4096
-        self.buffer = .init(start: .allocate(capacity: capacity), count: capacity)
+        self.buffer = .init(start: .allocate(capacity: bufferSize), count: bufferSize)
         let readSource = self.eventLoop.onReadable(descriptor: socket.descriptor, readSourceSignal)
         readSource.resume()
         self.readSource = readSource
@@ -127,8 +126,8 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
 
 extension Socket {
     /// Creates a data stream for this socket on the supplied event loop.
-    public func source(on eventLoop: Worker) -> SocketSource<Self> {
-        return .init(socket: self, on: eventLoop)
+    public func source(on eventLoop: Worker, bufferSize: Int = 4096) -> SocketSource<Self> {
+        return .init(socket: self, on: eventLoop, bufferSize: bufferSize)
     }
 }
 

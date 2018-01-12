@@ -82,7 +82,10 @@ public final class SocketSink<Socket>: InputStream
             upstream?.request()
             return
         }
-        writeData()
+
+        if !socketIsFull {
+            writeData()
+        }
     }
 
     /// Writes the buffered data to the socket.

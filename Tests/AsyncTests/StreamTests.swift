@@ -265,48 +265,6 @@ final class StreamTests : XCTestCase {
         XCTAssertEqual(chunks[3], [10, 11, 12])
         XCTAssertEqual(chunks[4], [13, 14, 15])
     }
-
-    func testTranslatingStreamOverflow() throws {
-        let emitter = EmitterStream([Int].self)
-        let loop = try DefaultEventLoop(label: "codes.vapor.test.translating")
-
-        let socket = loop.onTimeout(milliseconds: 100) { _ in /* fake socket */ }
-        socket.resume()
-
-        Thread.async { loop.runLoop() }
-
-        let stream = ArrayChunkingStream<Int>(size: 2).stream(on: loop)
-        emitter.output(to: stream)
-
-        var upstream: ConnectionContext?
-        var chunks: [[Int]] = []
-
-
-        let count = 10_000
-        let exp = expectation(description: "\(count) chunks")
-
-        stream.drain { req in
-            upstream = req
-        }.output { chunk in
-            chunks.append(chunk)
-            if chunks.count >= count {
-                exp.fulfill()
-            } else {
-                upstream?.request()
-            }
-        }.catch { error in
-            XCTFail("\(error)")
-        }.finally {
-            XCTFail("Never closed")
-        }
-
-        upstream?.request()
-
-        let huge = [Int](repeating: 5, count: count * 2)
-        emitter.emit(huge)
-
-        waitForExpectations(timeout: 30)
-    }
     
     func testPushStream() throws {
         var ints = [0, 1, 6, 1, 3, 5, 1, 9, 3, 7, 5, 1, 3, 2]
@@ -476,7 +434,6 @@ final class StreamTests : XCTestCase {
         ("testCloseChaining", testCloseChaining),
         ("testCloseChaining", testCloseChaining),
         ("testTranslatingStream", testTranslatingStream),
-        ("testTranslatingStreamOverflow", testTranslatingStreamOverflow),
         ("testPushStream", testPushStream),
         ("testPushStream", testPushStream),
         ("testPushStream", testPushStream),

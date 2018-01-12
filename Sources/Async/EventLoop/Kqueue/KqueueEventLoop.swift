@@ -52,31 +52,8 @@ public final class KqueueEventLoop: EventLoop {
         return KqueueEventSource(descriptor: 1, kq: kq, type: .timer(timeout: milliseconds), callback: callback)
     }
 
-    /// See EventLoop.async
-    public func async(_ callback: @escaping EventLoop.AsyncCallback) {
-        if task != nil {
-            // if there is a task waiting, run the event loop
-            // until it has been executed
-            run()
-        }
-
-        /// set the new task
-        task = callback
-    }
-    
     /// See EventLoop.run
     public func run() {
-        // while tasks are available, run them
-        while let task = self.task {
-            // make sure to set this task to nil, so that
-            // the task can set a new one if it needs
-            self.task = nil
-
-            // run the task, potentially creating a new task
-            // in the process
-            task()
-        }
-
         // check for new events
         let eventCount = kevent(kq, nil, 0, eventlist.baseAddress, Int32(eventlist.count), nil)
         guard eventCount >= 0 else {

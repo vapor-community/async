@@ -21,7 +21,7 @@ public protocol ByteSerializer: TranslatingStream where Output == UnsafeBufferPo
 public enum ByteSerializerResult<S> where S: ByteSerializer {
     case incomplete(UnsafeBufferPointer<UInt8>, state: S.SerializationState)
     case complete(UnsafeBufferPointer<UInt8>)
-    case awaiting(AnyOutputStream<UnsafeBufferPointer<UInt8>>)
+    case awaiting(AnyOutputStream<UnsafeBufferPointer<UInt8>>, state: S.SerializationState?)
 }
 
 /// Keeps track of the states for `ByteSerializerStream`
@@ -43,8 +43,6 @@ public final class ByteSerializerState<S> where S: ByteSerializer {
 extension ByteSerializer {
     /// Translates the input by serializing it
     public func translate(input: Input) throws -> Future<TranslatingStreamResult<Output>> {
-        let result = try self.serialize(input, state: self.state.incompleteState)
-        
         // This is a struct, so a nil check is required
         if self.state.streaming != nil {
             let promise = Promise<TranslatingStreamResult<Output>>()
@@ -55,6 +53,8 @@ extension ByteSerializer {
             return promise.future
         }
         
+        let result = try self.serialize(input, state: self.state.incompleteState)
+        
         switch result {
         case .complete(let buffer):
             self.state.incompleteState = nil
@@ -64,8 +64,10 @@ extension ByteSerializer {
             self.state.incompleteState = state
             
             return Future(.excess(buffer))
-        case .awaiting(let stream):
+        case .awaiting(let stream, let state):
             let promise = Promise<TranslatingStreamResult<Output>>()
+            
+            self.state.incompleteState = state
             
             stream.drain { upstream in
                 self.state.streaming = ByteSerializerState<Self>.StreamingState(

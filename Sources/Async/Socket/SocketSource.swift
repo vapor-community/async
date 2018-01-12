@@ -56,7 +56,7 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
         case .request(let count):
             assert(count == 1)
             requestedOutputRemaining += count
-            DEBUGPRINT("    \(DefaultEventLoop.current.label)")
+            //DEBUGPRINT("    \(DefaultEventLoop.current.label)")
             DEBUGPRINT("    \(readSource!.state)")
             switch readSource!.state {
             case .suspended: readSource!.resume()

@@ -93,7 +93,7 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
         let source = ensureReadSource()
         switch source.state {
         case .cancelled, .resumed: break
-        case .suspending, .suspended: source.resume()
+        case .suspended: source.resume()
         }
     }
 
@@ -102,7 +102,7 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
         let source = ensureReadSource()
         switch source.state {
         case .cancelled, .suspended: break
-        case .suspending, .resumed: source.suspend()
+        case .resumed: source.suspend()
         }
     }
 

@@ -21,11 +21,20 @@ public protocol ByteSerializer: TranslatingStream where Output == UnsafeBufferPo
 public enum ByteSerializerResult<S> where S: ByteSerializer {
     case incomplete(UnsafeBufferPointer<UInt8>, state: S.SerializationState)
     case complete(UnsafeBufferPointer<UInt8>)
+    case awaiting(AnyOutputStream<UnsafeBufferPointer<UInt8>>, state: S.SerializationState?)
 }
 
 /// Keeps track of the states for `ByteSerializerStream`
 public final class ByteSerializerState<S> where S: ByteSerializer {
+    fileprivate struct StreamingState {
+        fileprivate var upstream: ConnectionContext
+        fileprivate var stream: AnyOutputStream<UnsafeBufferPointer<UInt8>>
+        fileprivate var buffer: UnsafeBufferPointer<UInt8>?
+        fileprivate var completing: Promise<TranslatingStreamResult<S.Output>>
+    }
+    
     fileprivate var incompleteState: S.SerializationState?
+    fileprivate var streaming: StreamingState?
     
     /// Creates a new state machine for `ByteSerializerStream` conformant types
     public init() {}
@@ -33,18 +42,51 @@ public final class ByteSerializerState<S> where S: ByteSerializer {
 
 extension ByteSerializer {
     /// Translates the input by serializing it
-    public func translate(input: Input) throws -> TranslatingStreamResult<Output> {
+    public func translate(input: Input) throws -> Future<TranslatingStreamResult<Output>> {
+        // This is a struct, so a nil check is required
+        if self.state.streaming != nil {
+            let promise = Promise<TranslatingStreamResult<Output>>()
+            
+            self.state.streaming?.completing = promise
+            self.state.streaming?.upstream.request()
+            
+            return promise.future
+        }
+        
         let result = try self.serialize(input, state: self.state.incompleteState)
         
         switch result {
         case .complete(let buffer):
             self.state.incompleteState = nil
             
-            return .sufficient(buffer)
+            return Future(.sufficient(buffer))
         case .incomplete(let buffer, let state):
             self.state.incompleteState = state
             
-            return .excess(buffer)
+            return Future(.excess(buffer))
+        case .awaiting(let stream, let state):
+            let promise = Promise<TranslatingStreamResult<Output>>()
+            
+            self.state.incompleteState = state
+            
+            stream.drain { upstream in
+                self.state.streaming = ByteSerializerState<Self>.StreamingState(
+                    upstream: upstream,
+                    stream: stream,
+                    buffer: nil,
+                    completing: promise
+                )
+            }.output { buffer in
+                self.state.streaming?.completing.complete(.excess(buffer))
+            }.catch(onError: promise.fail).finally {
+                let completing = self.state.streaming?.completing
+                self.state.streaming = nil
+                completing?.complete(.insufficient)
+            }
+            
+            self.state.streaming?.upstream.request()
+            
+            return promise.future
         }
     }
 }

@@ -144,3 +144,36 @@ public func flatMap<A, B, C, Result>(
         }
     }
 }
+
+/// Calls the supplied callback when both futures have completed.
+public func map<A, B, Result>(
+    to result: Result.Type,
+    _ futureA: Future<A>,
+    _ futureB: Future<B>,
+    _ callback: @escaping (A, B) throws -> (Result)
+) -> Future<Result> {
+    return futureA.flatMap(to: Result.self) { a in
+        return futureB.map(to: Result.self) { b in
+            return try callback(a, b)
+        }
+    }
+}
+
+/// Calls the supplied callback when all three futures have completed.
+public func map<A, B, C, Result>(
+    to result: Result.Type,
+    _ futureA: Future<A>,
+    _ futureB: Future<B>,
+    _ futureC: Future<C>,
+    _ callback: @escaping (A, B, C) throws -> (Result)
+) -> Future<Result> {
+    return futureA.flatMap(to: Result.self) { a in
+        return futureB.flatMap(to: Result.self) { b in
+            return futureC.map(to: Result.self) { c in
+                return try callback(a, b, c)
+            }
+        }
+    }
+}
+
+

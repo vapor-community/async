@@ -69,20 +69,21 @@ extension ByteSerializer {
             
             self.state.incompleteState = state
             
-            stream.drain { upstream in
-                self.state.streaming = ByteSerializerState<Self>.StreamingState(
-                    upstream: upstream,
-                    stream: stream,
-                    buffer: nil,
-                    completing: promise
-                )
-            }.output { buffer in
+            let drain = stream.drain { buffer, upstream in
                 self.state.streaming?.completing.complete(.excess(buffer))
             }.catch(onError: promise.fail).finally {
                 let completing = self.state.streaming?.completing
                 self.state.streaming = nil
                 completing?.complete(.insufficient)
             }
+
+
+            self.state.streaming = ByteSerializerState<Self>.StreamingState(
+                upstream: drain,
+                stream: stream,
+                buffer: nil,
+                completing: promise
+            )
             
             self.state.streaming?.upstream.request()
             

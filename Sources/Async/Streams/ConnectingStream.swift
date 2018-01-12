@@ -20,7 +20,15 @@ public final class ConnectingStream<Data>: Async.Stream {
 
     /// See InputStream.input
     public func input(_ event: InputEvent<Data>) {
-        downstream?.input(event)
+        if let downstream = self.downstream {
+            downstream.input(event)
+        } else {
+            switch event {
+            case .connect(let upstream):
+                self.upstream = upstream
+            default: fatalError("No downstream connected")
+            }
+        }
     }
 
     /// See OutputStream.output

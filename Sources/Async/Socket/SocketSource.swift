@@ -37,25 +37,25 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
         self.buffers = SocketBuffers(count: 4, capacity: 4096)
         self.requestedOutputRemaining = 0
         self.socketIsEmpty = true
+        let readSource = self.eventLoop.onReadable(descriptor: socket.descriptor, readSourceSignal)
+        readSource.resume()
+        self.readSource = readSource
     }
 
     /// See OutputStream.output
     public func output<S>(to inputStream: S) where S: Async.InputStream, S.Input == UnsafeBufferPointer<UInt8> {
-        /// CALLED ON ACCEPT THREAD
         downstream = AnyInputStream(inputStream)
         inputStream.connect(to: self)
     }
 
     /// See ConnectionContext.connection
     public func connection(_ event: ConnectionEvent) {
-        /// CALLED ON SINK THREAD
         switch event {
         case .request(let count):
             assert(count == 1)
             buffers.releaseReadable()
             requestedOutputRemaining += count
             update()
-            resumeReading()
         case .cancel: close()
         }
     }
@@ -71,12 +71,8 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
             downstream?.next(buffer)
         }
 
-        if buffers.canWrite {
-            if socketIsEmpty {
-                resumeReading()
-            } else {
-                readData(isCancelled: false)
-            }
+        if buffers.canWrite, !socketIsEmpty {
+            readData()
         }
     }
 
@@ -88,33 +84,11 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
         downstream = nil
     }
 
-    /// Resumes reading data.
-    private func resumeReading() {
-        let source = ensureReadSource()
-        switch source.state {
-        case .cancelled, .resumed: break
-        case .suspended: source.resume()
-        }
-    }
-
-    /// Suspends reading data.
-    private func suspendReading() {
-        let source = ensureReadSource()
-        switch source.state {
-        case .cancelled, .suspended: break
-        case .resumed: source.suspend()
-        }
-    }
-
     /// Reads data and outputs to the output stream
     /// important: the socket _must_ be ready to read data
     /// as indicated by a read source.
-    private func readData(isCancelled: Bool) {
-        guard !isCancelled else {
-            close()
-            return
-        }
-
+    private func readData() {
+        // prepare the socket if necessary
         guard socket.isPrepared else {
             do {
                 try socket.prepareSocket()
@@ -124,11 +98,7 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
             return
         }
 
-        // if we were called, socket must no longer be empty
-        socketIsEmpty = false
-
         let buffer = buffers.nextWritable()
-
         let read: SocketReadStatus
         do {
             read = try socket.read(into: buffer)
@@ -142,16 +112,12 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
         switch read {
         case .read(let count):
             guard count > 0 else {
-                close() // used to be source.cancel
+                close()
                 return
             }
 
             let view = UnsafeBufferPointer<UInt8>(start: buffer.baseAddress, count: count)
             buffers.addReadable(view)
-
-            if !buffers.canWrite {
-                suspendReading()
-            }
         case .wouldBlock:
             socketIsEmpty = true
         }
@@ -159,15 +125,14 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
         update()
     }
 
-    /// Returns the existing read source or creates
-    /// and stores a new one
-    private func ensureReadSource() -> EventSource {
-        guard let existing = self.readSource else {
-            let readSource = self.eventLoop.onReadable(descriptor: socket.descriptor, readData)
-            self.readSource = readSource
-            return readSource
+    /// Called when the read source signals.
+    private func readSourceSignal(isCancelled: Bool) {
+        guard !isCancelled else {
+            close()
+            return
         }
-        return existing
+        socketIsEmpty = false
+        update()
     }
 
     /// Deallocated the pointer buffer

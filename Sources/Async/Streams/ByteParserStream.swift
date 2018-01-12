@@ -38,7 +38,7 @@ extension ByteParser {
     /// If output has been achieved, passes it downstream and requests more data otherwise
     ///
     /// When output has been achieved, the remainder of the input buffer will be left unused until more output is requested.
-    public func translate(input: UnsafeBufferPointer<UInt8>) throws -> TranslatingStreamResult<Output> {
+    public func translate(input: UnsafeBufferPointer<UInt8>) throws -> Future<TranslatingStreamResult<Output>> {
         let buffer = UnsafeBufferPointer<UInt8>(
             start: input.baseAddress?.advanced(by: self.state.parsedInput),
             count: input.count - self.state.parsedInput
@@ -50,17 +50,17 @@ extension ByteParser {
         case .uncompleted(let partial):
             self.state.partiallyParsed = partial
             self.state.parsedInput = 0
-            return .insufficient
+            return Future(.insufficient)
         case .completed(let consumed, let result):
             self.state.parsedInput = self.state.parsedInput &+ consumed
             self.state.partiallyParsed = nil
             
             if consumed == buffer.count {
                 self.state.parsedInput = 0
-                return .sufficient(result)
+                return Future(.sufficient(result))
             }
             
-            return .excess(result)
+            return Future(.excess(result))
         }
     }
 }

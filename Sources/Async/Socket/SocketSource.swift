@@ -13,7 +13,7 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
 
     /// Bytes from the socket are read into this buffer.
     /// Views into this buffer supplied to output streams.
-    private var buffers: SocketBuffers
+    private var buffer: UnsafeMutableBufferPointer<UInt8>
 
     /// Stores read event source.
     private var readSource: EventSource?
@@ -34,9 +34,10 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
     internal init(socket: Socket, on worker: Worker) {
         self.socket = socket
         self.eventLoop = worker.eventLoop
-        self.buffers = SocketBuffers(count: 4, capacity: 4096)
         self.requestedOutputRemaining = 0
         self.socketIsEmpty = true
+        let capacity = 4096
+        self.buffer = .init(start: .allocate(capacity: capacity), count: capacity)
         let readSource = self.eventLoop.onReadable(descriptor: socket.descriptor, readSourceSignal)
         readSource.resume()
         self.readSource = readSource
@@ -53,26 +54,9 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
         switch event {
         case .request(let count):
             assert(count == 1)
-            buffers.releaseReadable()
             requestedOutputRemaining += count
             update()
         case .cancel: close()
-        }
-    }
-
-    private func update() {
-        guard requestedOutputRemaining > 0 else {
-            return
-        }
-
-        while buffers.canRead && requestedOutputRemaining > 0 {
-            let buffer = buffers.leaseReadable()
-            requestedOutputRemaining -= 1
-            downstream?.next(buffer)
-        }
-
-        if buffers.canWrite, !socketIsEmpty {
-            readData()
         }
     }
 
@@ -82,6 +66,16 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
         downstream?.close()
         readSource = nil
         downstream = nil
+    }
+
+    private func update() {
+        guard requestedOutputRemaining > 0 else {
+            return
+        }
+
+        if !socketIsEmpty {
+            readData()
+        }
     }
 
     /// Reads data and outputs to the output stream
@@ -98,7 +92,6 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
             return
         }
 
-        let buffer = buffers.nextWritable()
         let read: SocketReadStatus
         do {
             read = try socket.read(into: buffer)
@@ -117,7 +110,7 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
             }
 
             let view = UnsafeBufferPointer<UInt8>(start: buffer.baseAddress, count: count)
-            buffers.addReadable(view)
+            downstream!.next(view)
         case .wouldBlock:
             socketIsEmpty = true
         }
@@ -137,7 +130,7 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
 
     /// Deallocated the pointer buffer
     deinit {
-        buffers.cleanup()
+        buffer.baseAddress?.deallocate(capacity: buffer.count)
     }
 }
 

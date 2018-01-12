@@ -110,6 +110,7 @@ public final class KqueueEventSource: EventSource {
 
     /// Updates the `kevent` to the `kqueue` handle.
     private func update() {
+        DEBUGPRINT("\(type(of: self)).\(#function)")
         switch state {
         case .cancelled: break
         case .resumed, .suspended:

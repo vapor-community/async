@@ -126,6 +126,7 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
             }
 
             let view = UnsafeBufferPointer<UInt8>(start: buffer.baseAddress, count: count)
+            requestedOutputRemaining -= 1
             downstream!.next(view)
         case .wouldBlock:
             socketIsEmpty = true
@@ -134,6 +135,11 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
 
     /// Called when the read source signals.
     private func readSourceSignal(isCancelled: Bool) {
+        guard socketIsEmpty else {
+            // ignore calls here if we already know the socket isn't empty
+            return
+        }
+
         DEBUGPRINT("\(type(of: self)).\(#function): \(isCancelled)")
         guard !isCancelled else {
             close()

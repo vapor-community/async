@@ -95,7 +95,7 @@ public struct Future<T>: FutureType {
     /// Locked method for adding an awaiter
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/advanced-futures/#adding-awaiters-to-all-results)
-    public func addAwaiter(callback: @escaping ResultCallback) {
+    public func addAwaiter(callback: @escaping FutureResultCallback<Expectation>) {
         switch storage {
         case .completed(let result):
             callback(result)

@@ -7,7 +7,7 @@ public final class Promise<T> {
     /// Contains information about callbacks
     /// waiting for this future to complete
     struct Awaiter {
-        let callback: Future<T>.ResultCallback
+        let callback: FutureResultCallback<T>
     }
     
     /// This promise's future.

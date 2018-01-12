@@ -1,6 +1,9 @@
 import Dispatch
 import Foundation
 
+/// Callback for accepting a result.
+public typealias FutureResultCallback<T> = (FutureResult<T>) -> ()
+
 /// A future result type.
 /// Concretely implemented by `Future<T>`
 public protocol FutureType {
@@ -9,10 +12,7 @@ public protocol FutureType {
     /// This future's result type.
     typealias Result = FutureResult<Expectation>
     
-    /// Callback for accepting a result.
-    typealias ResultCallback = (Result) -> ()
-    
-    func addAwaiter(callback: @escaping ResultCallback)
+    func addAwaiter(callback: @escaping FutureResultCallback<Expectation>)
 }
 
 // MARK: Convenience

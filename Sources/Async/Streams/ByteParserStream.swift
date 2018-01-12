@@ -9,7 +9,7 @@ public protocol ByteParser: TranslatingStream where Input == UnsafeBufferPointer
     var state: ByteParserState<Self> { get }
     
     /// Continues parsing a partially parsed Output
-    func parseBytes(from buffer: Input, partial: Partial?) throws -> ByteParserResult<Self>
+    func parseBytes(from buffer: Input, partial: Partial?) throws -> Future<ByteParserResult<Self>>
 }
 
 /// Keeps track of variables that are related to the parsing process
@@ -38,29 +38,31 @@ extension ByteParser {
     /// If output has been achieved, passes it downstream and requests more data otherwise
     ///
     /// When output has been achieved, the remainder of the input buffer will be left unused until more output is requested.
-    public func translate(input: UnsafeBufferPointer<UInt8>) throws -> TranslatingStreamResult<Output> {
+    public func translate(input: UnsafeBufferPointer<UInt8>) throws -> Future<TranslatingStreamResult<Output>> {
         let buffer = UnsafeBufferPointer<UInt8>(
             start: input.baseAddress?.advanced(by: self.state.parsedInput),
             count: input.count - self.state.parsedInput
         )
         
         let state = try parseBytes(from: buffer, partial: self.state.partiallyParsed)
-        
-        switch state {
-        case .uncompleted(let partial):
-            self.state.partiallyParsed = partial
-            self.state.parsedInput = 0
-            return .insufficient
-        case .completed(let consumed, let result):
-            self.state.parsedInput = self.state.parsedInput &+ consumed
-            self.state.partiallyParsed = nil
-            
-            if consumed == buffer.count {
+
+        return state.map(to: TranslatingStreamResult<Output>.self) { state in
+            switch state {
+            case .uncompleted(let partial):
+                self.state.partiallyParsed = partial
                 self.state.parsedInput = 0
-                return .sufficient(result)
+                return .insufficient
+            case .completed(let consumed, let result):
+                self.state.parsedInput = self.state.parsedInput &+ consumed
+                self.state.partiallyParsed = nil
+
+                if consumed == buffer.count {
+                    self.state.parsedInput = 0
+                    return .sufficient(result)
+                }
+
+                return .excess(result)
             }
-            
-            return .excess(result)
         }
     }
 }

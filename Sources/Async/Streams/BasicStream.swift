@@ -38,6 +38,7 @@ public final class ClosureStream<Data>: Stream, ConnectionContext {
     public func output<S>(to inputStream: S) where S : InputStream, Data == S.Input {
         let wrapped = AnyInputStream(inputStream)
         onOutput(wrapped)
+        inputStream.connect(to: self)
     }
 
     /// See ConnectionContext.connection

@@ -42,10 +42,10 @@ public final class EpollEventSource: EventSource {
         switch type {
         case .read(let descriptor):
             fd = descriptor
-            event.events = EPOLLET.rawValue | EPOLLIN.rawValue
+            event.events = EPOLLIN.rawValue
         case .write(let descriptor):
             fd = descriptor
-            event.events = EPOLLET.rawValue | EPOLLOUT.rawValue
+            event.events = EPOLLOUT.rawValue
         case .timer(let timeout):
             let tfd = timerfd_create(CLOCK_MONOTONIC, Int32(TFD_NONBLOCK))
             if tfd == -1 {

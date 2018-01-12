@@ -13,7 +13,7 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
 
     /// Bytes from the socket are read into this buffer.
     /// Views into this buffer supplied to output streams.
-    private var buffers: SocketBuffers
+    private var buffer: UnsafeMutableBufferPointer<UInt8>
 
     /// Stores read event source.
     private var readSource: EventSource?
@@ -27,56 +27,29 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
     /// A strong reference to the current eventloop
     private var eventLoop: EventLoop
 
-    /// True if the socket has returned that it would block
-    /// on the previous call
-    private var socketIsEmpty: Bool
-
-    internal init(socket: Socket, on worker: Worker) {
+    internal init(socket: Socket, on worker: Worker, bufferSize: Int) {
         self.socket = socket
         self.eventLoop = worker.eventLoop
-        self.buffers = SocketBuffers(count: 4, capacity: 4096)
         self.requestedOutputRemaining = 0
-        self.socketIsEmpty = true
+        self.buffer = .init(start: .allocate(capacity: bufferSize), count: bufferSize)
+        let readSource = self.eventLoop.onReadable(descriptor: socket.descriptor, readSourceSignal)
+        readSource.resume()
+        self.readSource = readSource
     }
 
     /// See OutputStream.output
     public func output<S>(to inputStream: S) where S: Async.InputStream, S.Input == UnsafeBufferPointer<UInt8> {
-        /// CALLED ON ACCEPT THREAD
         downstream = AnyInputStream(inputStream)
         inputStream.connect(to: self)
     }
 
     /// See ConnectionContext.connection
     public func connection(_ event: ConnectionEvent) {
-        /// CALLED ON SINK THREAD
         switch event {
         case .request(let count):
             assert(count == 1)
-            buffers.releaseReadable()
             requestedOutputRemaining += count
-            update()
-            resumeReading()
         case .cancel: close()
-        }
-    }
-
-    private func update() {
-        guard requestedOutputRemaining > 0 else {
-            return
-        }
-
-        while buffers.canRead && requestedOutputRemaining > 0 {
-            let buffer = buffers.leaseReadable()
-            requestedOutputRemaining -= 1
-            downstream?.next(buffer)
-        }
-
-        if buffers.canWrite {
-            if socketIsEmpty {
-                resumeReading()
-            } else {
-                readData(isCancelled: false)
-            }
         }
     }
 
@@ -84,37 +57,23 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
     public func close() {
         socket.close()
         downstream?.close()
-        readSource = nil
+        // readSource = nil
         downstream = nil
     }
 
-    /// Resumes reading data.
-    private func resumeReading() {
-        let source = ensureReadSource()
-        switch source.state {
-        case .cancelled, .resumed: break
-        case .suspended: source.resume()
+    private func update() {
+        guard requestedOutputRemaining > 0 else {
+            return
         }
-    }
 
-    /// Suspends reading data.
-    private func suspendReading() {
-        let source = ensureReadSource()
-        switch source.state {
-        case .cancelled, .suspended: break
-        case .resumed: source.suspend()
-        }
+        readData()
     }
 
     /// Reads data and outputs to the output stream
     /// important: the socket _must_ be ready to read data
     /// as indicated by a read source.
-    private func readData(isCancelled: Bool) {
-        guard !isCancelled else {
-            close()
-            return
-        }
-
+    private func readData() {
+        // prepare the socket if necessary
         guard socket.isPrepared else {
             do {
                 try socket.prepareSocket()
@@ -124,17 +83,12 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
             return
         }
 
-        // if we were called, socket must no longer be empty
-        socketIsEmpty = false
-
-        let buffer = buffers.nextWritable()
-
         let read: SocketReadStatus
         do {
             read = try socket.read(into: buffer)
         } catch {
             // any errors that occur here cannot be thrown,
-            //selfso send them to stream error catcher.
+            // so send them to stream error catcher.
             downstream?.error(error)
             return
         }
@@ -142,37 +96,29 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
         switch read {
         case .read(let count):
             guard count > 0 else {
-                close() // used to be source.cancel
+                close()
                 return
             }
 
             let view = UnsafeBufferPointer<UInt8>(start: buffer.baseAddress, count: count)
-            buffers.addReadable(view)
-
-            if !buffers.canWrite {
-                suspendReading()
-            }
-        case .wouldBlock:
-            socketIsEmpty = true
+            requestedOutputRemaining -= 1
+            downstream!.next(view)
+        case .wouldBlock: fatalError()
         }
-
-        update()
     }
 
-    /// Returns the existing read source or creates
-    /// and stores a new one
-    private func ensureReadSource() -> EventSource {
-        guard let existing = self.readSource else {
-            let readSource = self.eventLoop.onReadable(descriptor: socket.descriptor, readData)
-            self.readSource = readSource
-            return readSource
+    /// Called when the read source signals.
+    private func readSourceSignal(isCancelled: Bool) {
+        guard !isCancelled else {
+            close()
+            return
         }
-        return existing
+        update()
     }
 
     /// Deallocated the pointer buffer
     deinit {
-        buffers.cleanup()
+        buffer.baseAddress?.deallocate(capacity: buffer.count)
     }
 }
 
@@ -180,8 +126,8 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
 
 extension Socket {
     /// Creates a data stream for this socket on the supplied event loop.
-    public func source(on eventLoop: Worker) -> SocketSource<Self> {
-        return .init(socket: self, on: eventLoop)
+    public func source(on eventLoop: Worker, bufferSize: Int = 4096) -> SocketSource<Self> {
+        return .init(socket: self, on: eventLoop, bufferSize: bufferSize)
     }
 }
 

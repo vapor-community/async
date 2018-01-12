@@ -8,7 +8,7 @@ public protocol TranslatingStream {
 
     /// Convert the `Input` to `Output`.
     /// See `TranslatingStreamResult` for possible cases.
-    func translate(input: Input) throws -> TranslatingStreamResult<Output>
+    func translate(input: Input) throws -> Future<TranslatingStreamResult<Output>>
 }
 
 /// MARK: Stream
@@ -106,19 +106,8 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
             upstream = nil
             downstream = nil
         case .request(let count):
-            if recursionDepth >= 64 {
-                /// if we have exceeded the max recursion depth,
-                /// dispatch the next update asynchronously
-                eventLoop.async {
-                    self.downstreamDemand += count
-                    self.recursionDepth = 0
-                    self.update()
-                }
-            } else {
-                downstreamDemand += count
-                recursionDepth += 1
-                update()
-            }
+            downstreamDemand += count
+            update()
         }
     }
 
@@ -139,7 +128,7 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
             return
         }
         
-        let state: TranslatingStreamResult<Output>
+        let state: Future<TranslatingStreamResult<Output>>
         
         do {
             state = try translator.translate(input: input)
@@ -149,22 +138,26 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
             return
         }
 
-        switch state {
-        case .insufficient:
-            /// the translator was unable to provide an output
-            /// after consuming the entirety of the supplied input
-            self.currentInput = nil
-        case .sufficient(let output):
-            /// the input created exactly 1 output.
-            self.currentInput = nil
-            downstreamDemand -= 1
-            downstream?.next(output)
-        case .excess(let output):
-            /// the input contains more than 1 output.
-            downstreamDemand -= 1
-            downstream?.next(output)
-        }
+        state.do { state in
+            switch state {
+            case .insufficient:
+                /// the translator was unable to provide an output
+                /// after consuming the entirety of the supplied input
+                self.currentInput = nil
+            case .sufficient(let output):
+                /// the input created exactly 1 output.
+                self.currentInput = nil
+                self.downstreamDemand -= 1
+                self.downstream?.next(output)
+            case .excess(let output):
+                /// the input contains more than 1 output.
+                self.downstreamDemand -= 1
+                self.downstream?.next(output)
+            }
 
-        update()
+            self.update()
+        }.catch { error in
+            self.downstream?.error(error)
+        }
     }
 }

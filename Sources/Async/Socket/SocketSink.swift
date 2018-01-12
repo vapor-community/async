@@ -10,6 +10,9 @@ public final class SocketSink<Socket>: InputStream
 
     /// The client stream's underlying socket.
     public var socket: Socket
+    
+    /// Indicates if the socket is currently able to write data
+    fileprivate var writable: Bool
 
     /// Data being fed into the client stream is stored here.
     private var inputBuffer: UnsafeBufferPointer<UInt8>? {
@@ -30,17 +33,16 @@ public final class SocketSink<Socket>: InputStream
     /// A strong reference to the current eventloop
     private var eventLoop: EventLoop
 
-    /// True if the socket has returned that it would block
-    /// on the previous call
-    private var socketIsFull: Bool
-
     internal init(socket: Socket, on worker: Worker) {
         self.socket = socket
         self.eventLoop = worker.eventLoop
         // Allocate one TCP packet
         self.inputBuffer = nil
-        self.socketIsFull = false
+        self.writable = false
         self.written = 0
+        let writeSource = self.eventLoop.onWritable(descriptor: socket.descriptor, writeSourceSignal)
+        writeSource.resume()
+        self.writeSource = writeSource
     }
 
     /// See InputStream.input
@@ -53,20 +55,16 @@ public final class SocketSink<Socket>: InputStream
             }
 
             inputBuffer = input
-            resumeWriting()
+            
+            update()
         case .connect(let connection):
-            /// CALLED ON ACCEPT THREAD
             upstream = connection
-            if socketIsFull {
-                resumeWriting()
-            } else {
-                writeData(isCancelled: false)
-            }
+            update()
         case .close:
             close()
         case .error(let e):
-            print("Uncaught Error: \(e)")
             close()
+            fatalError("\(e)")
         }
     }
 
@@ -77,47 +75,24 @@ public final class SocketSink<Socket>: InputStream
         upstream = nil
     }
 
-    /// Resumes writing data
-    private func resumeWriting() {
-        let source = ensureWriteSource()
-        switch source.state {
-        case .cancelled, .resumed: break
-        case .suspended: source.resume()
-        }
-    }
-
-    /// Suspends writing data
-    private func suspendWriting() {
-        let source = ensureWriteSource()
-        switch source.state {
-        case .cancelled, .suspended: break
-        case .resumed: source.suspend()
-        }
-    }
-
-    /// Writes the buffered data to the socket.
-    private func writeData(isCancelled: Bool) {
-        guard !isCancelled else {
-            close()
-            return
-        }
-
-        /// if we are called, socket must not be full
-        socketIsFull = false
-
+    private func update() {
         guard inputBuffer != nil else {
-            suspendWriting()
+            self.writable = true
             upstream?.request()
             return
         }
 
+        writeData()
+    }
 
+    /// Writes the buffered data to the socket.
+    private func writeData() {
+        // ensure socket is prepared
         guard socket.isPrepared else {
             do {
                 try socket.prepareSocket()
             } catch {
-                /// FIXME: handle better
-                print(error)
+                fatalError("\(error)")
             }
             return
         }
@@ -133,37 +108,32 @@ public final class SocketSink<Socket>: InputStream
             )
             
             let write = try socket.write(from: buffer)
+            
+            self.writable = false
+            
             switch write {
             case .wrote(let count):
                 switch count + written {
-                case input.count:
-                    // wrote everything, suspend until we get more data to write
-                    inputBuffer = nil
-                    suspendWriting()
-                    upstream?.request()
-                default:
-                    written += count
+                case input.count: inputBuffer = nil
+                default: written += count
                 }
-            case .wouldBlock: socketIsFull = true
+            case .wouldBlock: fatalError()
             }
         } catch {
-            /// FIXME: handle better
-            print(error)
+            fatalError("\(error)")
         }
+
+        update()
     }
 
-    /// Creates a new WriteSource if there is no write source yet
-    private func ensureWriteSource() -> EventSource {
-        guard let existing = self.writeSource else {
-            let writeSource = self.eventLoop.onWritable(descriptor: socket.descriptor, writeData)
-            self.writeSource = writeSource
-            return writeSource
+    /// Called when the write source signals.
+    private func writeSourceSignal(isCancelled: Bool) {
+        guard !isCancelled else {
+            close()
+            return
         }
-        return existing
-    }
-
-    /// Deallocated the pointer buffer
-    deinit {
+        
+        update()
     }
 }
 

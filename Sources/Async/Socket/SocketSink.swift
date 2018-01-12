@@ -35,21 +35,20 @@ public final class SocketSink<Socket>: InputStream
     private var socketIsFull: Bool
 
     internal init(socket: Socket, on worker: Worker) {
-        // print("\(type(of: self)).\(#function)")
+        DEBUGPRINT("\(type(of: self)).\(#function)")
         self.socket = socket
         self.eventLoop = worker.eventLoop
         // Allocate one TCP packet
         self.inputBuffer = nil
-        self.socketIsFull = false
+        self.socketIsFull = true
         self.written = 0
         let writeSource = self.eventLoop.onWritable(descriptor: socket.descriptor, writeSourceSignal)
-        writeSource.resume()
         self.writeSource = writeSource
     }
 
     /// See InputStream.input
     public func input(_ event: InputEvent<UnsafeBufferPointer<UInt8>>) {
-        // print("\(type(of: self)).\(#function)")
+        DEBUGPRINT("\(type(of: self)).\(#function)")
         switch event {
         case .next(let input):
             /// crash if the upstream is illegally overproducing data
@@ -58,30 +57,33 @@ public final class SocketSink<Socket>: InputStream
             }
 
             inputBuffer = input
-            update()
+            DEBUGPRINT("    \(writeSource!.state)")
+            switch writeSource!.state {
+            case .suspended: writeSource!.resume()
+            case .resumed: update()
+            default: break
+            }
         case .connect(let connection):
             upstream = connection
-            if !socketIsFull {
-                update()
-            }
+            update()
         case .close:
             close()
         case .error(let e):
-            print("Uncaught Error: \(e)")
             close()
+            fatalError("\(e)")
         }
     }
 
     /// Cancels reading
     public func close() {
-        // print("\(type(of: self)).\(#function)")
+        DEBUGPRINT("\(type(of: self)).\(#function)")
         socket.close()
         writeSource = nil
         upstream = nil
     }
 
     private func update() {
-        // print("\(type(of: self)).\(#function)")
+        DEBUGPRINT("\(type(of: self)).\(#function)")
         guard inputBuffer != nil else {
             upstream?.request()
             return
@@ -94,7 +96,7 @@ public final class SocketSink<Socket>: InputStream
 
     /// Writes the buffered data to the socket.
     private func writeData() {
-        // print("\(type(of: self)).\(#function)")
+        DEBUGPRINT("\(type(of: self)).\(#function)")
         // ensure socket is prepared
         guard socket.isPrepared else {
             do {
@@ -106,7 +108,7 @@ public final class SocketSink<Socket>: InputStream
         }
 
         guard let input = inputBuffer else {
-            // print(DefaultEventLoop.current.label)
+            DEBUGPRINT(DefaultEventLoop.current.label)
             fatalError("\(#function) called while inputBuffer is nil")
         }
 
@@ -117,7 +119,7 @@ public final class SocketSink<Socket>: InputStream
             )
             
             let write = try socket.write(from: buffer)
-            // print("    write: \(write)")
+            DEBUGPRINT("    write: \(write)")
             switch write {
             case .wrote(let count):
                 switch count + written {
@@ -136,7 +138,12 @@ public final class SocketSink<Socket>: InputStream
 
     /// Called when the write source signals.
     private func writeSourceSignal(isCancelled: Bool) {
-        // print("\(type(of: self)).\(#function): \(isCancelled)")
+        guard socketIsFull else {
+            // ignore if we already know the socket is not full
+            return
+        }
+
+        DEBUGPRINT("\(type(of: self)).\(#function): \(isCancelled)")
         guard !isCancelled else {
             close()
             return
@@ -153,4 +160,8 @@ extension Socket {
     public func sink(on eventLoop: Worker) -> SocketSink<Self> {
         return .init(socket: self, on: eventLoop)
     }
+}
+
+func DEBUGPRINT(_ string: String) {
+    print(string)
 }

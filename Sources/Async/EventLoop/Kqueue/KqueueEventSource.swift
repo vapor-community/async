@@ -43,7 +43,6 @@ public final class KqueueEventSource: EventSource {
             event.data = timeout
         }
         event.ident = UInt(descriptor)
-        event.flags = UInt16(EV_ADD | EV_DISABLE | EV_CLEAR)
 
         let pointer = UnsafeMutablePointer<KqueueEventSource>.allocate(capacity: 1)
         event.udata = UnsafeMutableRawPointer(pointer)

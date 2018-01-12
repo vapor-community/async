@@ -32,7 +32,7 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
     private var socketIsEmpty: Bool
 
     internal init(socket: Socket, on worker: Worker) {
-        // print("\(type(of: self)).\(#function)")
+        DEBUGPRINT("\(type(of: self)).\(#function)")
         self.socket = socket
         self.eventLoop = worker.eventLoop
         self.requestedOutputRemaining = 0
@@ -51,14 +51,15 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
 
     /// See ConnectionContext.connection
     public func connection(_ event: ConnectionEvent) {
-        // print("\(type(of: self)).\(#function)")
+        DEBUGPRINT("\(type(of: self)).\(#function)")
         switch event {
         case .request(let count):
             assert(count == 1)
             requestedOutputRemaining += count
-            // print("    \(readSource!.state)")
+            DEBUGPRINT("    \(DefaultEventLoop.current.label)")
+            DEBUGPRINT("    \(readSource!.state)")
             switch readSource!.state {
-            case .suspended: readSource?.resume()
+            case .suspended: readSource!.resume()
             case .resumed: update()
             default: break
             }
@@ -68,7 +69,7 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
 
     /// Cancels reading
     public func close() {
-        // print("\(type(of: self)).\(#function)")
+        DEBUGPRINT("\(type(of: self)).\(#function)")
         socket.close()
         downstream?.close()
         readSource = nil
@@ -81,7 +82,7 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
             return
         }
 
-        // print("\(type(of: self)).\(#function)")
+        DEBUGPRINT("\(type(of: self)).\(#function)")
         guard requestedOutputRemaining > 0 else {
             return
         }
@@ -95,7 +96,7 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
     /// important: the socket _must_ be ready to read data
     /// as indicated by a read source.
     private func readData() {
-        // print("\(type(of: self)).\(#function)")
+        DEBUGPRINT("\(type(of: self)).\(#function)")
         // prepare the socket if necessary
         guard socket.isPrepared else {
             do {
@@ -115,7 +116,7 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
             downstream?.error(error)
             return
         }
-        // print("    \(read)")
+        DEBUGPRINT("    \(read)")
 
         switch read {
         case .read(let count):
@@ -126,7 +127,6 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
 
             let view = UnsafeBufferPointer<UInt8>(start: buffer.baseAddress, count: count)
             downstream!.next(view)
-            update()
         case .wouldBlock:
             socketIsEmpty = true
         }
@@ -134,7 +134,7 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
 
     /// Called when the read source signals.
     private func readSourceSignal(isCancelled: Bool) {
-        // print("\(type(of: self)).\(#function): \(isCancelled)")
+        DEBUGPRINT("\(type(of: self)).\(#function): \(isCancelled)")
         guard !isCancelled else {
             close()
             return

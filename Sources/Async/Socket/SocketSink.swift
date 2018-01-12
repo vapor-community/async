@@ -31,7 +31,6 @@ public final class SocketSink<Socket>: InputStream
     private var eventLoop: EventLoop
 
     internal init(socket: Socket, on worker: Worker) {
-        DEBUGPRINT("\(type(of: self)).\(#function)")
         self.socket = socket
         self.eventLoop = worker.eventLoop
         // Allocate one TCP packet
@@ -135,8 +134,4 @@ extension Socket {
     public func sink(on eventLoop: Worker) -> SocketSink<Self> {
         return .init(socket: self, on: eventLoop)
     }
-}
-
-func DEBUGPRINT(_ string: String) {
-    // print(string)
 }

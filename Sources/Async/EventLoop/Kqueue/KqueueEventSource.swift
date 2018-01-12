@@ -103,7 +103,11 @@ public final class KqueueEventSource: EventSource {
     internal func signal(_ eof: Bool) {
         switch state {
         case .resumed:
-            if eof { defer { cancel() } }
+            defer {
+                if eof {
+                    cancel()
+                }
+            }
             callback(eof)
         case .cancelled, .suspended: break
         }
@@ -112,7 +116,6 @@ public final class KqueueEventSource: EventSource {
 
     /// Updates the `kevent` to the `kqueue` handle.
     private func update() {
-        DEBUGPRINT("\(type(of: self)).\(#function)")
         switch state {
         case .cancelled: break
         case .resumed, .suspended:

@@ -28,7 +28,6 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
     private var eventLoop: EventLoop
 
     internal init(socket: Socket, on worker: Worker) {
-        DEBUGPRINT("\(type(of: self)).\(#function)")
         self.socket = socket
         self.eventLoop = worker.eventLoop
         self.requestedOutputRemaining = 0
@@ -47,7 +46,6 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
 
     /// See ConnectionContext.connection
     public func connection(_ event: ConnectionEvent) {
-        DEBUGPRINT("\(type(of: self)).\(#function)")
         switch event {
         case .request(let count):
             assert(count == 1)
@@ -58,7 +56,6 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
 
     /// Cancels reading
     public func close() {
-        DEBUGPRINT("\(type(of: self)).\(#function)")
         socket.close()
         downstream?.close()
         // readSource = nil

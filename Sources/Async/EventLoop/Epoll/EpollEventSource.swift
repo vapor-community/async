@@ -42,7 +42,7 @@ public final class EpollEventSource: EventSource {
         switch type {
         case .read(let descriptor):
             fd = descriptor
-            event.events = EPOLLIN.rawValue
+            event.events = EPOLLET.rawValue | EPOLLIN.rawValue
         case .write(let descriptor):
             fd = descriptor
             event.events = EPOLLOUT.rawValue

@@ -76,7 +76,7 @@ public final class KqueueEventSource: EventSource {
         case .cancelled:
             fatalError("Called `.resume()` on a cancelled KqueueEventSource.")
         case .suspended:
-            event.flags = UInt16(EV_ADD | EV_ENABLE | EV_CLEAR)
+            event.flags = UInt16(EV_ADD | EV_ENABLE)
             update()
             state = .resumed
         case .resumed:

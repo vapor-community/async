@@ -10,9 +10,6 @@ public final class SocketSink<Socket>: InputStream
 
     /// The client stream's underlying socket.
     public var socket: Socket
-    
-    /// Indicates if the socket is currently able to write data
-    fileprivate var writable: Bool
 
     /// Data being fed into the client stream is stored here.
     private var inputBuffer: UnsafeBufferPointer<UInt8>? {
@@ -33,12 +30,15 @@ public final class SocketSink<Socket>: InputStream
     /// A strong reference to the current eventloop
     private var eventLoop: EventLoop
 
+    /// True if the socket is ready
+    private var socketIsReady: Bool
+
     internal init(socket: Socket, on worker: Worker) {
         self.socket = socket
         self.eventLoop = worker.eventLoop
         // Allocate one TCP packet
         self.inputBuffer = nil
-        self.writable = false
+        self.socketIsReady = false
         self.written = 0
         let writeSource = self.eventLoop.onWritable(descriptor: socket.descriptor, writeSourceSignal)
         writeSource.resume()
@@ -55,11 +55,9 @@ public final class SocketSink<Socket>: InputStream
             }
 
             inputBuffer = input
-            
             update()
         case .connect(let connection):
             upstream = connection
-            update()
         case .close:
             close()
         case .error(let e):
@@ -76,8 +74,11 @@ public final class SocketSink<Socket>: InputStream
     }
 
     private func update() {
+        guard socketIsReady else {
+            return
+        }
+
         guard inputBuffer != nil else {
-            self.writable = true
             upstream?.request()
             return
         }
@@ -108,9 +109,6 @@ public final class SocketSink<Socket>: InputStream
             )
             
             let write = try socket.write(from: buffer)
-            
-            self.writable = false
-            
             switch write {
             case .wrote(let count):
                 switch count + written {
@@ -122,8 +120,6 @@ public final class SocketSink<Socket>: InputStream
         } catch {
             fatalError("\(error)")
         }
-
-        update()
     }
 
     /// Called when the write source signals.
@@ -132,7 +128,7 @@ public final class SocketSink<Socket>: InputStream
             close()
             return
         }
-        
+        socketIsReady = true
         update()
     }
 }

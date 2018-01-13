@@ -131,7 +131,7 @@ public final class EpollEventSource: EventSource {
         let ctl = epoll_ctl(epfd, op, descriptor, &event);
         if ctl == -1 {
             switch errno {
-            case EEXIST: // ignore
+            case EEXIST: break // ignore
             default:
                 let reason = String(cString: strerror(errno))
                 fatalError("An error occured during EpollEventSource.update: \(reason)")

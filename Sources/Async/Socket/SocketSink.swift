@@ -30,16 +30,15 @@ public final class SocketSink<Socket>: InputStream
     /// A strong reference to the current eventloop
     private var eventLoop: EventLoop
 
-    /// True if the socket is ready
-    private var socketIsReady: Bool
+    /// True if we are waiting on upstream
+    private var isAwaitingUpstream: Bool
 
     internal init(socket: Socket, on worker: Worker) {
         self.socket = socket
         self.eventLoop = worker.eventLoop
-        // Allocate one TCP packet
         self.inputBuffer = nil
-        self.socketIsReady = false
         self.written = 0
+        self.isAwaitingUpstream = false
         let writeSource = self.eventLoop.onWritable(descriptor: socket.descriptor, writeSourceSignal)
         writeSource.resume()
         self.writeSource = writeSource
@@ -49,13 +48,14 @@ public final class SocketSink<Socket>: InputStream
     public func input(_ event: InputEvent<UnsafeBufferPointer<UInt8>>) {
         switch event {
         case .next(let input):
+            isAwaitingUpstream = false
+
             /// crash if the upstream is illegally overproducing data
             guard inputBuffer == nil else {
                 fatalError("\(#function) was called while inputBuffer is not nil")
             }
 
             inputBuffer = input
-            update()
         case .connect(let connection):
             upstream = connection
         case .close:
@@ -71,19 +71,6 @@ public final class SocketSink<Socket>: InputStream
         socket.close()
         writeSource = nil
         upstream = nil
-    }
-
-    private func update() {
-        guard socketIsReady else {
-            return
-        }
-
-        guard inputBuffer != nil else {
-            upstream?.request()
-            return
-        }
-
-        writeData()
     }
 
     /// Writes the buffered data to the socket.
@@ -128,8 +115,15 @@ public final class SocketSink<Socket>: InputStream
             close()
             return
         }
-        socketIsReady = true
-        update()
+
+        guard inputBuffer != nil else {
+            if !isAwaitingUpstream {
+                upstream!.request()
+            }
+            return
+        }
+
+        writeData()
     }
 }
 

@@ -46,9 +46,7 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
     /// See ConnectionContext.connection
     public func connection(_ event: ConnectionEvent) {
         switch event {
-        case .request(let count):
-            assert(count == 1)
-            requestedOutputRemaining += count
+        case .request(let count): requestedOutputRemaining += count
         case .cancel: close()
         }
     }
@@ -59,14 +57,6 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
         downstream?.close()
         // readSource = nil
         downstream = nil
-    }
-
-    private func update() {
-        guard requestedOutputRemaining > 0 else {
-            return
-        }
-
-        readData()
     }
 
     /// Reads data and outputs to the output stream
@@ -113,7 +103,12 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
             close()
             return
         }
-        update()
+
+        guard requestedOutputRemaining > 0 else {
+            return
+        }
+        
+        readData()
     }
 
     /// Deallocated the pointer buffer

@@ -77,9 +77,12 @@ extension ByteSerializer {
                 completing?.complete(.insufficient)
             }
 
+            guard let upstream = drain.upstream else {
+                fatalError("Upstream `nil` during ByteSerializer.translate")
+            }
 
             self.state.streaming = ByteSerializerState<Self>.StreamingState(
-                upstream: drain,
+                upstream: upstream,
                 stream: stream,
                 buffer: nil,
                 completing: promise

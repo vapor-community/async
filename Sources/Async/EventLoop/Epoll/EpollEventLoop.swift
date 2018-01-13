@@ -79,9 +79,9 @@ public final class EpollEventLoop: EventLoop {
             if event.events & EPOLLERR.rawValue > 0 {
                 let reason = String(cString: strerror(Int32(event.data.u32)))
                 fatalError("An error occured during an event: \(reason)")
-            } else {
-                source.signal(event.events & EPOLLHUP.rawValue > 0)
             }
+
+            source.signal(event.events & EPOLLHUP.rawValue > 0)
         }
     }
 }

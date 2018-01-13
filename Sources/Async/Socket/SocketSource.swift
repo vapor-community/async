@@ -92,7 +92,11 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
 
             let view = UnsafeBufferPointer<UInt8>(start: buffer.baseAddress, count: count)
             requestedOutputRemaining -= 1
-            downstream!.next(view)
+            if let downstream = self.downstream {
+                downstream.next(view)
+            } else {
+                fatalError("Read when downstream not yet ready")
+            }
         case .wouldBlock: fatalError()
         }
     }
@@ -105,6 +109,10 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
         }
 
         guard requestedOutputRemaining > 0 else {
+            return
+        }
+
+        guard downstream != nil else {
             return
         }
 

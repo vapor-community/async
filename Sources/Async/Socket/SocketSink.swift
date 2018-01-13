@@ -118,7 +118,11 @@ public final class SocketSink<Socket>: InputStream
 
         guard inputBuffer != nil else {
             if !isAwaitingUpstream {
-                upstream!.request()
+                if let upstream = self.upstream {
+                    upstream.request()
+                } else {
+                    // no upstream ready yet
+                }
             }
             return
         }

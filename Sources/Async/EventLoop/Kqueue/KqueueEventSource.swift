@@ -20,17 +20,24 @@ public final class KqueueEventSource: EventSource {
     private let kq: Int32
 
     /// The callback to signal.
-    private var callback: EventLoop.EventCallback
+    private var callback: EventCallback
 
     /// Pointer to this event source to store on kevent
     private var pointer: UnsafeMutablePointer<KqueueEventSource>
+
+    /// HACK
+    private let type: KqueueEventSourceType
+
+    /// This event source's config
+    private let config: EventSourceConfig
 
     /// Create a new `KqueueEventSource` for the supplied descriptor.
     internal init(
         descriptor: Int32,
         kq: Int32,
         type: KqueueEventSourceType,
-        callback: @escaping EventLoop.EventCallback
+        config: EventSourceConfig,
+        callback: @escaping EventCallback
     ) {
         var event = kevent()
         switch type {
@@ -44,9 +51,11 @@ public final class KqueueEventSource: EventSource {
         }
         event.ident = UInt(descriptor)
 
+        self.type = type
         let pointer = UnsafeMutablePointer<KqueueEventSource>.allocate(capacity: 1)
         event.udata = UnsafeMutableRawPointer(pointer)
 
+        self.config = config
         self.state = .suspended
         self.pointer = pointer
         self.event = event
@@ -64,9 +73,12 @@ public final class KqueueEventSource: EventSource {
         case .suspended:
             fatalError("Called `.suspend()` on a suspended KqueueEventSource.")
         case .resumed:
-            event.flags = UInt16(EV_ADD | EV_DISABLE)
-            update()
+            switch config.trigger {
+            case .edge: event.flags = UInt16(EV_ADD | EV_DISABLE | EV_CLEAR)
+            case .level: event.flags = UInt16(EV_ADD | EV_DISABLE)
+            }
             state = .suspended
+            update()
         }
     }
 
@@ -76,9 +88,12 @@ public final class KqueueEventSource: EventSource {
         case .cancelled:
             fatalError("Called `.resume()` on a cancelled KqueueEventSource.")
         case .suspended:
-            event.flags = UInt16(EV_ADD | EV_ENABLE)
-            update()
+            switch config.trigger {
+            case .edge: event.flags = UInt16(EV_ADD | EV_ENABLE | EV_CLEAR)
+            case .level: event.flags = UInt16(EV_ADD | EV_ENABLE)
+            }
             state = .resumed
+            update()
         case .resumed:
             fatalError("Called `.resume()` on a resumed KqueueEventSource.")
         }
@@ -91,6 +106,7 @@ public final class KqueueEventSource: EventSource {
         case .resumed, .suspended:
             event.flags = UInt16(EV_DELETE)
             state = .cancelled
+            update()
 
             // deallocate reference to self
             pointer.deinitialize()
@@ -100,13 +116,11 @@ public final class KqueueEventSource: EventSource {
 
     /// Signals the event's callback.
     internal func signal(_ eof: Bool) {
+        //print("Source.signal: \(event.ident) \(state) \(type) eof: \(eof) \(DefaultEventLoop.current.label)")
         switch state {
         case .resumed:
-            defer {
-                if eof {
-                    cancel()
-                }
-            }
+            // caller should do this
+            // defer { if eof { cancel() } }
             callback(eof)
         case .cancelled, .suspended: break
         }
@@ -115,14 +129,11 @@ public final class KqueueEventSource: EventSource {
 
     /// Updates the `kevent` to the `kqueue` handle.
     private func update() {
-        switch state {
-        case .cancelled: break
-        case .resumed, .suspended:
-            let response = kevent(kq, &event, 1, nil, 0, nil)
-            if response < 0 {
-                let reason = String(cString: strerror(errno))
-                fatalError("An error occured during KqueueEventSource.update: \(reason)")
-            }
+        //print("Source.update: \(event.ident) \(state) \(type) \(DefaultEventLoop.current.label)")
+        let response = kevent(kq, &event, 1, nil, 0, nil)
+        if response < 0 {
+            let reason = String(cString: strerror(errno))
+            fatalError("An error occured during KqueueEventSource.update: \(reason)")
         }
     }
 }

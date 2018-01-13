@@ -12,14 +12,7 @@ public final class SocketSink<Socket>: InputStream
     public var socket: Socket
 
     /// Data being fed into the client stream is stored here.
-    private var inputBuffer: UnsafeBufferPointer<UInt8>? {
-        didSet {
-            written = 0
-        }
-    }
-    
-    /// The amount of bytes already written from the `inputBuffer`
-    private var written: Int
+    private var inputBuffer: UnsafeBufferPointer<UInt8>?
     
     /// Stores write event source.
     private var writeSource: EventSource?
@@ -33,28 +26,28 @@ public final class SocketSink<Socket>: InputStream
     /// True if we are waiting on upstream
     private var isAwaitingUpstream: Bool
 
+    /// Creates a new `SocketSink`
     internal init(socket: Socket, on worker: Worker) {
         self.socket = socket
         self.eventLoop = worker.eventLoop
         self.inputBuffer = nil
-        self.written = 0
         self.isAwaitingUpstream = false
-        let writeSource = self.eventLoop.onWritable(descriptor: socket.descriptor, writeSourceSignal)
+        let writeSource = self.eventLoop.onWritable(
+            descriptor: socket.descriptor,
+            config: .init(trigger: .level),
+            writeSourceSignal
+        )
         writeSource.resume()
         self.writeSource = writeSource
     }
 
     /// See InputStream.input
     public func input(_ event: InputEvent<UnsafeBufferPointer<UInt8>>) {
+        // update variables
         switch event {
         case .next(let input):
             isAwaitingUpstream = false
-
-            /// crash if the upstream is illegally overproducing data
-            guard inputBuffer == nil else {
-                fatalError("\(#function) was called while inputBuffer is not nil")
-            }
-
+            assert(inputBuffer == nil, "SocketSink upstream is illegally overproducing input buffers.")
             inputBuffer = input
         case .connect(let connection):
             upstream = connection
@@ -63,6 +56,19 @@ public final class SocketSink<Socket>: InputStream
         case .error(let e):
             close()
             fatalError("\(e)")
+        }
+
+        // resume write source if necessary
+        switch event {
+        case .next, .connect:
+            guard let writeSource = self.writeSource else {
+                fatalError("SocketSink upstream illegally producing data after cancellation.")
+            }
+            switch writeSource.state {
+            case .suspended: writeSource.resume()
+            default: break
+            }
+        default: break
         }
     }
 
@@ -74,7 +80,7 @@ public final class SocketSink<Socket>: InputStream
     }
 
     /// Writes the buffered data to the socket.
-    private func writeData() {
+    private func writeData(buffer: UnsafeBufferPointer<UInt8>) {
         // ensure socket is prepared
         guard socket.isPrepared else {
             do {
@@ -85,49 +91,47 @@ public final class SocketSink<Socket>: InputStream
             return
         }
 
-        guard let input = inputBuffer else {
-            fatalError("\(#function) called while inputBuffer is nil")
-        }
-
-        do {
-            let buffer = UnsafeBufferPointer<UInt8>(
-                start: input.baseAddress?.advanced(by: written),
-                count: input.count - written
-            )
-            
-            let write = try socket.write(from: buffer)
-            switch write {
-            case .wrote(let count):
-                switch count + written {
-                case input.count: inputBuffer = nil
-                default: written += count
-                }
-            case .wouldBlock: fatalError()
+        let write = try! socket.write(from: buffer) // FIXME: add an error handler
+        switch write {
+        case .wrote(let count):
+            switch count {
+            case buffer.count: self.inputBuffer = nil
+            default:
+                inputBuffer = UnsafeBufferPointer<UInt8>(
+                    start: buffer.baseAddress?.advanced(by: count),
+                    count: buffer.count - count
+                )
             }
-        } catch {
-            fatalError("\(error)")
+        case .wouldBlock: fatalError("SocketSink write illegally returned wouldBlock")
         }
     }
 
     /// Called when the write source signals.
     private func writeSourceSignal(isCancelled: Bool) {
         guard !isCancelled else {
+            // source is cancelled, we will never receive signals again
             close()
             return
         }
 
-        guard inputBuffer != nil else {
-            if !isAwaitingUpstream {
-                if let upstream = self.upstream {
-                    upstream.request()
-                } else {
-                    // no upstream ready yet
+        // ensure there's an input buffer to write
+        guard let buffer = inputBuffer else {
+            if let upstream = self.upstream, !isAwaitingUpstream {
+                // there's no input buffer, and we aren't already waiting upstream
+                // request the next buffer
+                isAwaitingUpstream = true
+                upstream.request()
+            } else {
+                guard let writeSource = self.writeSource else {
+                    fatalError("SocketSink writeSource illegally nil during signal.")
                 }
+                // we are waiting on upstream (connect or next data), suspend notifications
+                writeSource.suspend()
             }
             return
         }
 
-        writeData()
+        writeData(buffer: buffer)
     }
 }
 

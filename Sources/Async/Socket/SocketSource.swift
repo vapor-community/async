@@ -27,12 +27,17 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
     /// A strong reference to the current eventloop
     private var eventLoop: EventLoop
 
+    /// Creates a new `SocketSource`
     internal init(socket: Socket, on worker: Worker, bufferSize: Int) {
         self.socket = socket
         self.eventLoop = worker.eventLoop
         self.requestedOutputRemaining = 0
         self.buffer = .init(start: .allocate(capacity: bufferSize), count: bufferSize)
-        let readSource = self.eventLoop.onReadable(descriptor: socket.descriptor, readSourceSignal)
+        let readSource = self.eventLoop.onReadable(
+            descriptor: socket.descriptor,
+            config: .init(trigger: .level),
+            readSourceSignal
+        )
         readSource.resume()
         self.readSource = readSource
     }
@@ -46,7 +51,17 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
     /// See ConnectionContext.connection
     public func connection(_ event: ConnectionEvent) {
         switch event {
-        case .request(let count): requestedOutputRemaining += count
+        case .request(let count):
+            assert(count == 1, "SocketSource downstream must request 1 buffer at a time.")
+            requestedOutputRemaining += count
+            // downstream wants output now, resume the read source if necessary
+            guard let readSource = self.readSource else {
+                fatalError("SocketSource readSource illegally nil during signal.")
+            }
+            switch readSource.state {
+            case .suspended: readSource.resume()
+            default: break
+            }
         case .cancel: close()
         }
     }
@@ -55,68 +70,65 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
     public func close() {
         socket.close()
         downstream?.close()
-        // readSource = nil
+        readSource = nil
         downstream = nil
     }
 
     /// Reads data and outputs to the output stream
     /// important: the socket _must_ be ready to read data
     /// as indicated by a read source.
-    private func readData() {
-        // prepare the socket if necessary
-        guard socket.isPrepared else {
-            do {
-                try socket.prepareSocket()
-            } catch {
-                downstream?.error(error)
-            }
-            return
-        }
-
-        let read: SocketReadStatus
+    private func readData(to downstream: AnyInputStream<UnsafeBufferPointer<UInt8>>) {
         do {
-            read = try socket.read(into: buffer)
-        } catch {
-            // any errors that occur here cannot be thrown,
-            // so send them to stream error catcher.
-            downstream?.error(error)
-            return
-        }
-
-        switch read {
-        case .read(let count):
-            guard count > 0 else {
-                close()
+            // prepare the socket if necessary
+            guard socket.isPrepared else {
+                try socket.prepareSocket()
+                // make sure to return, since the socket is no longer "ready"
                 return
             }
 
-            let view = UnsafeBufferPointer<UInt8>(start: buffer.baseAddress, count: count)
-            requestedOutputRemaining -= 1
-            if let downstream = self.downstream {
+            let read = try socket.read(into: buffer)
+            switch read {
+            case .read(let count):
+                guard count > 0 else {
+                    close()
+                    return
+                }
+
+                let view = UnsafeBufferPointer<UInt8>(start: buffer.baseAddress, count: count)
+                requestedOutputRemaining -= 1
                 downstream.next(view)
-            } else {
-                fatalError("Read when downstream not yet ready")
+            case .wouldBlock: fatalError()
             }
-        case .wouldBlock: fatalError()
+        } catch {
+            // any errors that occur here cannot be thrown,
+            // so send them to stream error catcher.
+            downstream.error(error)
         }
     }
 
     /// Called when the read source signals.
     private func readSourceSignal(isCancelled: Bool) {
         guard !isCancelled else {
+            // source is cancelled, we will never receive signals again
             close()
             return
         }
 
         guard requestedOutputRemaining > 0 else {
+            guard let readSource = self.readSource else {
+                fatalError("SocketSource readSource illegally nil during signal.")
+            }
+            // downstream isn't ready for data yet, suspend notifications
+            readSource.suspend()
             return
         }
 
-        guard downstream != nil else {
+        guard let downstream = self.downstream else {
+            // downstream not setup yet
             return
         }
 
-        readData()
+        readData(to: downstream)
     }
 
     /// Deallocated the pointer buffer

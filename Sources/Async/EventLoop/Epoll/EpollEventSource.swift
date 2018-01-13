@@ -130,8 +130,12 @@ public final class EpollEventSource: EventSource {
     private func update(op: Int32) {
         let ctl = epoll_ctl(epfd, op, descriptor, &event);
         if ctl == -1 {
-            let reason = String(cString: strerror(errno))
-            fatalError("An error occured during EpollEventSource.update: \(reason)")
+            switch errno {
+            case EEXIST: // ignore
+            default:
+                let reason = String(cString: strerror(errno))
+                fatalError("An error occured during EpollEventSource.update: \(reason)")
+            }
         }
     }
 }

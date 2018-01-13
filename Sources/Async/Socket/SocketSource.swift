@@ -107,7 +107,7 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
         guard requestedOutputRemaining > 0 else {
             return
         }
-        
+
         readData()
     }
 

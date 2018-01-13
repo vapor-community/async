@@ -70,8 +70,8 @@ extension DrainStream {
     /// Drains the close stream into a closure.
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/streams-introduction/#draining-streams)
-    public func finally(onClose: @escaping DrainStream<Void>.OnClose) -> ConnectionContext {
+    public func finally(onClose: @escaping DrainStream<Void>.OnClose) -> DrainStream<Input> {
         self.onCloseClosure = onClose
-        return self.upstream!
+        return self
     }
 }

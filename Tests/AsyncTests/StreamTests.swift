@@ -22,7 +22,7 @@ final class StreamTests : XCTestCase {
         }.finally {
             closed = true
         }
-        drain.request(count: .max)
+        drain.upstream!.request(count: .max)
 
         numberEmitter.emit(1)
         numberEmitter.emit(2)
@@ -49,7 +49,7 @@ final class StreamTests : XCTestCase {
         }.finally {
             // closed
         }
-        drain.request(count: .max)
+        drain.upstream!.request(count: .max)
 
         numberEmitter.emit(1)
         numberEmitter.emit(2)
@@ -79,7 +79,7 @@ final class StreamTests : XCTestCase {
         }.finally {
             // closed
         }
-        drain.request(count: .max)
+        drain.upstream!.request(count: .max)
 
         numberEmitter.emit(1)
         numberEmitter.emit(2)
@@ -110,7 +110,7 @@ final class StreamTests : XCTestCase {
         }.finally {
             closed = true
         }
-        drain.request(count: .max)
+        drain.upstream!.request(count: .max)
 
         numberEmitter.emit(1)
         numberEmitter.emit(2)
@@ -190,7 +190,7 @@ final class StreamTests : XCTestCase {
         }.finally {
             reached = true
         }
-        drain.request(count: .max)
+        drain.upstream!.request(count: .max)
         
         while i < max {
             numberEmitter.emit(i)
@@ -218,7 +218,7 @@ final class StreamTests : XCTestCase {
         }.finally {
             print("closed")
         }
-        drain.request()
+        drain.upstream!.request()
 
         // test insufficient, then sufficient
         XCTAssertEqual(chunks.count, 0)
@@ -332,7 +332,7 @@ final class StreamTests : XCTestCase {
             closed = true
             XCTAssertEqual(cases.count, offset)
         }
-        drain.request(count: .max)
+        drain.upstream!.request(count: .max)
         
         func emit(_ data: [UInt8]) {
             data.withUnsafeBufferPointer(emitter.emit)
@@ -394,7 +394,7 @@ final class StreamTests : XCTestCase {
             closed = true
             XCTAssertEqual(cases.count, offset)
         }
-        drain.request(count: .max)
+        drain.upstream!.request(count: .max)
         
         var sent = 0
         var size = 1

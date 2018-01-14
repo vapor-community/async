@@ -46,7 +46,9 @@ public final class SocketSink<Socket>: InputStream
         switch event {
         case .next(let input):
             isAwaitingUpstream = false
-            assert(inputBuffer == nil, "SocketSink upstream is illegally overproducing input buffers.")
+            guard inputBuffer == nil else {
+                fatalError("SocketSink upstream is illegally overproducing input buffers.")
+            }
             inputBuffer = input
         case .connect(let connection):
             upstream = connection

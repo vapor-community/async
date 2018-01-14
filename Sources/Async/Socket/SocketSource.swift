@@ -35,7 +35,6 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
         self.buffer = .init(start: .allocate(capacity: bufferSize), count: bufferSize)
         let readSource = self.eventLoop.onReadable(
             descriptor: socket.descriptor,
-            // config: .init(trigger: .level),
             readSourceSignal
         )
         readSource.resume()

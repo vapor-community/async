@@ -34,7 +34,6 @@ public final class SocketSink<Socket>: InputStream
         self.isAwaitingUpstream = false
         let writeSource = self.eventLoop.onWritable(
             descriptor: socket.descriptor,
-            // config: .init(trigger: .level),
             writeSourceSignal
         )
         writeSource.resume()

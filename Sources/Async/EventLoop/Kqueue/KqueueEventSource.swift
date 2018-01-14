@@ -25,9 +25,6 @@ public final class KqueueEventSource: EventSource {
     /// Pointer to this event source to store on kevent
     private var pointer: UnsafeMutablePointer<KqueueEventSource>
 
-    /// HACK
-    private let type: KqueueEventSourceType
-
     /// Create a new `KqueueEventSource` for the supplied descriptor.
     internal init(
         descriptor: Int32,
@@ -47,7 +44,6 @@ public final class KqueueEventSource: EventSource {
         }
         event.ident = UInt(dup(descriptor))
 
-        self.type = type
         let pointer = UnsafeMutablePointer<KqueueEventSource>.allocate(capacity: 1)
         event.udata = UnsafeMutableRawPointer(pointer)
 
@@ -105,11 +101,8 @@ public final class KqueueEventSource: EventSource {
 
     /// Signals the event's callback.
     internal func signal(_ eof: Bool) {
-        //print("Source.signal: \(event.ident) \(state) \(type) eof: \(eof) \(DefaultEventLoop.current.label)")
         switch state {
         case .resumed:
-            // caller should do this
-            // defer { if eof { cancel() } }
             callback(eof)
         case .cancelled, .suspended: break
         }
@@ -118,7 +111,6 @@ public final class KqueueEventSource: EventSource {
 
     /// Updates the `kevent` to the `kqueue` handle.
     private func update() {
-        //print("Source.update: \(event.ident) \(state) \(type) \(DefaultEventLoop.current.label)")
         let response = kevent(kq, &event, 1, nil, 0, nil)
         if response < 0 {
             let reason = String(cString: strerror(errno))

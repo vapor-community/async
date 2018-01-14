@@ -29,7 +29,7 @@ public final class EpollEventSource: EventSource {
     private let type: EpollEventSourceType
 
     /// This source's descriptor
-    private let descriptor: Int32
+    let descriptor: Int32
 
     /// Create a new `EpollEventSource` for the supplied descriptor.
     internal init(

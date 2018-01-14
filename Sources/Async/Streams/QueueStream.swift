@@ -1,11 +1,11 @@
-/// An inverse client stream accepting responses and outputting requests.
-/// Used to implement HTTPClient. Should be kept internal
-internal final class QueueStream<I, O>: Stream, ConnectionContext {
+/// Allows for input to be enqueued by a push stream or user.
+/// The next output will be returned as a Future for enqueued inputs.
+public final class QueueStream<I, O>: Stream, ConnectionContext {
     /// See InputStream.Input
-    typealias Input = I
+    public typealias Input = I
 
     /// See OutputStream.Output
-    typealias Output = O
+    public typealias Output = O
 
     /// Queue of promised responses
     var inputQueue: [Promise<Input>]
@@ -22,7 +22,7 @@ internal final class QueueStream<I, O>: Stream, ConnectionContext {
     /// Parsed responses
     var upstream: ConnectionContext?
 
-    /// Creates a new HTTP client stream
+    /// Creates a new `QueueStream` stream
     init() {
         self.inputQueue = []
         self.outputQueue = []
@@ -50,7 +50,7 @@ internal final class QueueStream<I, O>: Stream, ConnectionContext {
     }
 
     /// See ConnectionContext.connection
-    func connection(_ event: ConnectionEvent) {
+    public func connection(_ event: ConnectionEvent) {
         switch event {
         case .request(let count):
             let isSuspended = remainingDownstreamRequests == 0
@@ -64,13 +64,13 @@ internal final class QueueStream<I, O>: Stream, ConnectionContext {
     }
 
     /// See OutputStream.output
-    func output<S>(to inputStream: S) where S : InputStream, S.Input == Output {
+    public func output<S>(to inputStream: S) where S : InputStream, S.Input == Output {
         downstream = AnyInputStream(inputStream)
         inputStream.connect(to: self)
     }
 
     /// See InputStream.input
-    func input(_ event: InputEvent<Input>) {
+    public func input(_ event: InputEvent<Input>) {
         switch event {
         case .connect(let upstream):
             self.upstream = upstream

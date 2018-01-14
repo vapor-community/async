@@ -26,16 +26,17 @@ public final class SocketSink<Socket>: InputStream
     /// True if we are waiting on upstream
     private var isAwaitingUpstream: Bool
 
+    /// True if this sink has been closed
+    private var isClosed: Bool
+
     /// Creates a new `SocketSink`
     internal init(socket: Socket, on worker: Worker) {
         self.socket = socket
         self.eventLoop = worker.eventLoop
         self.inputBuffer = nil
         self.isAwaitingUpstream = false
-        let writeSource = self.eventLoop.onWritable(
-            descriptor: socket.descriptor,
-            writeSourceSignal
-        )
+        self.isClosed = false
+        let writeSource = self.eventLoop.onWritable(descriptor: socket.descriptor, writeSourceSignal)
         writeSource.resume()
         self.writeSource = writeSource
     }
@@ -75,6 +76,9 @@ public final class SocketSink<Socket>: InputStream
 
     /// Cancels reading
     public func close() {
+        guard !isClosed else {
+            return
+        }
         guard let writeSource = self.writeSource else {
             fatalError("SocketSink writeSource illegally nil during close.")
         }
@@ -82,6 +86,7 @@ public final class SocketSink<Socket>: InputStream
         socket.close()
         self.writeSource = nil
         upstream = nil
+        isClosed = true
     }
 
     /// Writes the buffered data to the socket.

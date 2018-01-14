@@ -27,16 +27,17 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
     /// A strong reference to the current eventloop
     private var eventLoop: EventLoop
 
+    /// True if this source has been closed
+    private var isClosed: Bool
+
     /// Creates a new `SocketSource`
     internal init(socket: Socket, on worker: Worker, bufferSize: Int) {
         self.socket = socket
         self.eventLoop = worker.eventLoop
         self.requestedOutputRemaining = 0
+        self.isClosed = false
         self.buffer = .init(start: .allocate(capacity: bufferSize), count: bufferSize)
-        let readSource = self.eventLoop.onReadable(
-            descriptor: socket.descriptor,
-            readSourceSignal
-        )
+        let readSource = self.eventLoop.onReadable(descriptor: socket.descriptor, readSourceSignal)
         readSource.resume()
         self.readSource = readSource
     }
@@ -67,6 +68,9 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
 
     /// Cancels reading
     public func close() {
+        guard !isClosed else {
+            return
+        }
         guard let readSource = self.readSource else {
             fatalError("SocketSource readSource illegally nil during signal.")
         }
@@ -75,6 +79,7 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
         downstream?.close()
         self.readSource = nil
         downstream = nil
+        isClosed = true
     }
 
     /// Reads data and outputs to the output stream

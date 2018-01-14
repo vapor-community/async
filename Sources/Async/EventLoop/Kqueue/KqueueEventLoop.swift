@@ -61,11 +61,11 @@ public final class KqueueEventLoop: EventLoop {
         events: for i in 0..<Int(eventCount) {
             let event = eventlist[i]
             let source = event.udata.assumingMemoryBound(to: KqueueEventSource.self).pointee
-            if event.flags & UInt16(EV_ERROR) > 0 {
+            if event.flags & EV_ERROR > 0 {
                 let reason = String(cString: strerror(Int32(event.data)))
                 fatalError("An error occured during an event: \(reason)")
             } else {
-                source.signal(event.flags & UInt16(EV_EOF) > 0)
+                source.signal(event.flags & EV_EOF > 0)
             }
         }
     }

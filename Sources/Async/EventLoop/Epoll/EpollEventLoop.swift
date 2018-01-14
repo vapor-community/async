@@ -71,9 +71,10 @@ public final class EpollEventLoop: EventLoop {
             let source = event.data.ptr.assumingMemoryBound(to: EpollEventSource.self).pointee
 
             guard event.events & EPOLLERR.rawValue == 0 else {
-                var error: Int32 = 0
-                var errlen = socklen_t(4)
-                getsockopt(source.descriptor, SOL_SOCKET, SO_ERROR, &error, &errlen)
+//                var error: Int32 = 0
+//                var errlen = socklen_t(4)
+//                getsockopt(source.descriptor, SOL_SOCKET, SO_ERROR, &error, &errlen)
+                // TODO: Signal errors?
                 source.signal(true)
                 return
             }

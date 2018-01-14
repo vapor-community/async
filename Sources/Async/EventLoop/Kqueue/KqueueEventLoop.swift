@@ -8,47 +8,37 @@ public final class KqueueEventLoop: EventLoop {
     /// See EventLoop.label
     public let label: String
 
-    /// The `kqueue` handle.
+    /// The `kqueue` handle for write signals.
     private let kq: Int32
 
     /// Event list buffer. This will be passed to
     /// kevent each time the event loop is ready for
     /// additional signals.
     private var eventlist: UnsafeMutableBufferPointer<kevent>
-
-    /// Async task to run
-    private var task: AsyncCallback?
     
     /// Create a new `KqueueEventLoop`
     public init(label: String) throws {
         self.label = label
-        let status = kqueue()
-        if status == -1 {
-            throw EventLoopError(identifier: "kqueue", reason: "Could not create kqueue.")
-        }
-        self.kq = status
+        self.kq = try KqueueEventLoop.makekq()
 
         /// the maxiumum amount of events to handle per cycle
         let maxEvents = 4096
         eventlist = .init(start: .allocate(capacity: maxEvents), count: maxEvents)
-
-        /// set async task to nil
-        task = nil
     }
 
     /// See EventLoop.onReadable
-    public func onReadable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
+    public func onReadable(descriptor: Int32, _ callback: @escaping EventCallback) -> EventSource {
         return KqueueEventSource(descriptor: descriptor, kq: kq, type: .read, callback: callback)
     }
 
     /// See EventLoop.onWritable
-    public func onWritable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
+    public func onWritable(descriptor: Int32, _ callback: @escaping EventCallback) -> EventSource {
         return KqueueEventSource(descriptor: descriptor, kq: kq, type: .write, callback: callback)
     }
 
 
-    /// See EventLoop.ononTimeout
-    public func onTimeout(milliseconds: Int, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
+    /// See EventLoop.onTimeout
+    public func onTimeout(milliseconds: Int, _ callback: @escaping EventCallback) -> EventSource {
         return KqueueEventSource(descriptor: 1, kq: kq, type: .timer(timeout: milliseconds), callback: callback)
     }
 
@@ -67,7 +57,7 @@ public final class KqueueEventLoop: EventLoop {
             }
         }
 
-        // print("[\(label)] \(eventCount) New Events")
+        // signal the events
         events: for i in 0..<Int(eventCount) {
             let event = eventlist[i]
             let source = event.udata.assumingMemoryBound(to: KqueueEventSource.self).pointee
@@ -78,6 +68,15 @@ public final class KqueueEventLoop: EventLoop {
                 source.signal(event.flags & UInt16(EV_EOF) > 0)
             }
         }
+    }
+
+    /// Creates a new `kqueue`.
+    private static func makekq() throws -> Int32 {
+        let kq = kqueue()
+        if kq == -1 {
+            throw EventLoopError(identifier: "kqueue", reason: "Could not create read kqueue.")
+        }
+        return kq
     }
 
     deinit {

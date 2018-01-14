@@ -20,7 +20,7 @@ public final class EpollEventSource: EventSource {
     internal var event: epoll_event
 
     /// The callback to signal.
-    private var callback: EventLoop.EventCallback
+    private var callback: EventCallback
 
     /// Pointer to this event source to store on epoll event
     private var pointer: UnsafeMutablePointer<EpollEventSource>
@@ -35,17 +35,17 @@ public final class EpollEventSource: EventSource {
     internal init(
         epfd: Int32,
         type: EpollEventSourceType,
-        callback: @escaping EventLoop.EventCallback
+        callback: @escaping EventCallback
     ) {
         let fd: Int32
         var event = epoll_event()
         switch type {
         case .read(let descriptor):
             fd = dup(descriptor)
-            event.events = EPOLLIN.rawValue | EPOLLIN.rawValue
+            event.events = EPOLLIN.rawValue
         case .write(let descriptor):
             fd = dup(descriptor)
-            event.events = EPOLLIN.rawValue | EPOLLOUT.rawValue
+            event.events = EPOLLOUT.rawValue
         case .timer(let timeout):
             let tfd = timerfd_create(CLOCK_MONOTONIC, Int32(TFD_NONBLOCK))
             if tfd == -1 {
@@ -89,6 +89,7 @@ public final class EpollEventSource: EventSource {
         case .suspended:
             fatalError("Called `.suspend()` on a suspended EpollEventSource.")
         case .resumed:
+            state = .suspended
             update(op: EPOLL_CTL_DEL)
         }
     }
@@ -99,6 +100,7 @@ public final class EpollEventSource: EventSource {
         case .cancelled:
             fatalError("Called `.resume()` on a cancelled EpollEventSource.")
         case .suspended:
+            state = .resumed
             update(op: EPOLL_CTL_ADD)
         case .resumed:
             fatalError("Called `.resume()` on a resumed EpollEventSource.")
@@ -108,17 +110,22 @@ public final class EpollEventSource: EventSource {
     /// See EventSource.cancel
     public func cancel() {
         switch state {
-        case .cancelled: fatalError("Called `.cancel()` on a cancelled EpollEventSource.")
-        case .resumed, .suspended:
-            update(op: EPOLL_CTL_DEL)
-            // deallocate reference to self
-            pointer.deallocate(capacity: 1)
-            pointer.deinitialize()
+        case .resumed: self.suspend()
+        default: break
+        }
 
+        switch state {
+        case .cancelled: fatalError("Called `.cancel()` on a cancelled EpollEventSource.")
+        case .resumed: fatalError("Called `.cancel()` on a resumed EpollEventSource.")
+        case .suspended:
             switch type {
             case .timer: close(event.data.fd)
             default: break
             }
+
+            // deallocate reference to self
+            pointer.deinitialize()
+            pointer.deallocate(capacity: 1)
         }
     }
     

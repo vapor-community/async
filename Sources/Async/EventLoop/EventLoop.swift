@@ -8,18 +8,16 @@ import Foundation
     public typealias DefaultEventLoop = KqueueEventLoop
 #endif
 
+
+/// An event callback.
+/// If the supplied argument is true, this event
+/// has been cancelled and the callback will never
+/// be called again.
+public typealias EventCallback = (Bool) -> ()
+
 /// An event loop handles signaling completion of blocking work
 /// to create non-blocking, callback-based pipelines.
 public protocol EventLoop: Worker {
-    /// An event callback.
-    /// If the supplied argument is true, this event
-    /// has been cancelled and the callback will never
-    /// be called again.
-    typealias EventCallback = (Bool) -> ()
-
-    /// An async callback.
-    typealias AsyncCallback = () -> ()
-
     /// This event loop's label.
     var label: String { get }
 
@@ -38,7 +36,7 @@ public protocol EventLoop: Worker {
 
     /// Creates a new timer event source.
     /// This callback will be called perodically when the timeout is reached.
-    func onTimeout(milliseconds: Int, _ callback: @escaping EventLoop.EventCallback) -> EventSource
+    func onTimeout(milliseconds: Int, _ callback: @escaping EventCallback) -> EventSource
 
     /// Runs a single cycle for this event loop.
     /// Call `EventLoop.runLoop()` to run indefinitely.
@@ -49,7 +47,8 @@ extension EventLoop {
     /// Returns the current event loop.
     public static var current: EventLoop {
         guard let eventLoop = Thread.current.threadDictionary["eventLoop"] as? EventLoop else {
-            fatalError("Current thread is not an event loop.")
+            // fatalError("Current thread is not an event loop.")
+            return try! DefaultEventLoop(label: "N/A")
         }
         return eventLoop
     }

@@ -21,7 +21,7 @@ public final class DispatchEventLoop: EventLoop {
     }
 
     /// See EventLoop.onReadable
-    public func onReadable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
+    public func onReadable(descriptor: Int32, _ callback: @escaping EventCallback) -> EventSource {
         let source = DispatchSource.makeReadSource(fileDescriptor: descriptor, queue: queue)
         source.setEventHandler { callback(false) }
         source.setCancelHandler { callback(true) }
@@ -29,7 +29,7 @@ public final class DispatchEventLoop: EventLoop {
     }
 
     /// See EventLoop.onWritable
-    public func onWritable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
+    public func onWritable(descriptor: Int32, _ callback: @escaping EventCallback) -> EventSource {
         let source = DispatchSource.makeWriteSource(fileDescriptor: descriptor, queue: queue)
         source.setEventHandler { callback(false) }
         source.setCancelHandler { callback(true) }
@@ -37,13 +37,8 @@ public final class DispatchEventLoop: EventLoop {
     }
 
     /// See EventLoop.onTimeout
-    public func onTimeout(milliseconds: Int, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
+    public func onTimeout(milliseconds: Int, _ callback: @escaping EventCallback) -> EventSource {
         fatalError("unsupported")
-    }
-
-    /// See EventLoop.async
-    public func async(_ callback: @escaping EventLoop.AsyncCallback) {
-        queue.async { callback() }
     }
 
     /// See EventLoop.run

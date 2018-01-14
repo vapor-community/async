@@ -11,9 +11,6 @@ public final class EpollEventLoop: EventLoop {
     /// The epoll handle.
     private let epfd: Int32
 
-    /// Async task to run
-    private var task: AsyncCallback?
-
     /// Event list buffer. This will be passed to
     /// kevent each time the event loop is ready for
     /// additional signals.
@@ -31,13 +28,10 @@ public final class EpollEventLoop: EventLoop {
         /// the maxiumum amount of events to handle per cycle
         let maxEvents = 4096
         eventlist = .init(start: .allocate(capacity: maxEvents), count: maxEvents)
-
-        /// set current task to nil
-        task = nil
     }
 
     /// See EventLoop.onReadable
-    public func onReadable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
+    public func onReadable(descriptor: Int32, _ callback: @escaping EventCallback) -> EventSource {
         return EpollEventSource(
             epfd: epfd,
             type: .read(descriptor: descriptor),
@@ -46,7 +40,7 @@ public final class EpollEventLoop: EventLoop {
     }
 
     /// See EventLoop.onWritable
-    public func onWritable(descriptor: Int32, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
+    public func onWritable(descriptor: Int32, _ callback: @escaping EventCallback) -> EventSource {
         return EpollEventSource(
             epfd: epfd,
             type: .write(descriptor: descriptor),
@@ -55,7 +49,7 @@ public final class EpollEventLoop: EventLoop {
     }
 
     /// See EventLoop.ononTimeout
-    public func onTimeout(milliseconds: Int, _ callback: @escaping EventLoop.EventCallback) -> EventSource {
+    public func onTimeout(milliseconds: Int, _ callback: @escaping EventCallback) -> EventSource {
         return EpollEventSource(
             epfd: epfd,
             type: .timer(timeout: milliseconds),

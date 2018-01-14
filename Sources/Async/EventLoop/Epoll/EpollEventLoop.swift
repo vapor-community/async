@@ -70,9 +70,12 @@ public final class EpollEventLoop: EventLoop {
             let event = eventlist[i]
             let source = event.data.ptr.assumingMemoryBound(to: EpollEventSource.self).pointee
 
-            if event.events & EPOLLERR.rawValue > 0 {
-                let reason = String(cString: strerror(Int32(event.data.u32)))
-                fatalError("An error occured during an event: \(reason)")
+            guard event.events & EPOLLERR.rawValue == 0 else {
+                var error: Int32 = 0
+                var errlen = socklen_t(4)
+                getsockopt(source.descriptor, SOL_SOCKET, SO_ERROR, &error, &errlen)
+                source.signal(true)
+                return
             }
 
             source.signal(event.events & EPOLLHUP.rawValue > 0)

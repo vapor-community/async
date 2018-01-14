@@ -47,8 +47,7 @@ extension EventLoop {
     /// Returns the current event loop.
     public static var current: EventLoop {
         guard let eventLoop = Thread.current.threadDictionary["eventLoop"] as? EventLoop else {
-            // fatalError("Current thread is not an event loop.")
-            return try! DefaultEventLoop(label: "N/A")
+            fatalError("Current thread is not an event loop.")
         }
         return eventLoop
     }

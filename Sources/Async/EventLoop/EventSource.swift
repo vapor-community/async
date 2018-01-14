@@ -27,26 +27,3 @@ public enum EventSourceState {
     /// called. Cannot be resumed or suspended.
     case cancelled
 }
-
-/// Config options for an event source.
-public struct EventSourceConfig {
-    /// The trigger type for this event source.
-    public let trigger: EventSourceTrigger
-
-    /// Creates a new `EventSourceConfig`
-    public init(trigger: EventSourceTrigger) {
-        self.trigger = trigger
-    }
-}
-
-/// Supported event source trigger modes.
-public enum EventSourceTrigger {
-    /// The event will be triggered whenever
-    /// the state _changes_ to the desired state.
-    /// The state should be considered no longer desirable
-    /// when calls to the system return "would block" indiciations.
-    case edge
-    /// The event will be triggered every time
-    /// the state is == to the desired state.
-    case level
-}

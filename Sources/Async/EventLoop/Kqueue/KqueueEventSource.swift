@@ -28,15 +28,11 @@ public final class KqueueEventSource: EventSource {
     /// HACK
     private let type: KqueueEventSourceType
 
-    /// This event source's config
-    private let config: EventSourceConfig
-
     /// Create a new `KqueueEventSource` for the supplied descriptor.
     internal init(
         descriptor: Int32,
         kq: Int32,
         type: KqueueEventSourceType,
-        config: EventSourceConfig,
         callback: @escaping EventCallback
     ) {
         var event = kevent()
@@ -49,13 +45,12 @@ public final class KqueueEventSource: EventSource {
             event.filter = Int16(EVFILT_TIMER)
             event.data = timeout
         }
-        event.ident = UInt(descriptor)
+        event.ident = UInt(dup(descriptor))
 
         self.type = type
         let pointer = UnsafeMutablePointer<KqueueEventSource>.allocate(capacity: 1)
         event.udata = UnsafeMutableRawPointer(pointer)
 
-        self.config = config
         self.state = .suspended
         self.pointer = pointer
         self.event = event
@@ -73,10 +68,7 @@ public final class KqueueEventSource: EventSource {
         case .suspended:
             fatalError("Called `.suspend()` on a suspended KqueueEventSource.")
         case .resumed:
-            switch config.trigger {
-            case .edge: event.flags = UInt16(EV_ADD | EV_DISABLE | EV_CLEAR)
-            case .level: event.flags = UInt16(EV_ADD | EV_DISABLE)
-            }
+            event.flags = UInt16(EV_ADD | EV_DISABLE)
             state = .suspended
             update()
         }
@@ -88,10 +80,7 @@ public final class KqueueEventSource: EventSource {
         case .cancelled:
             fatalError("Called `.resume()` on a cancelled KqueueEventSource.")
         case .suspended:
-            switch config.trigger {
-            case .edge: event.flags = UInt16(EV_ADD | EV_ENABLE | EV_CLEAR)
-            case .level: event.flags = UInt16(EV_ADD | EV_ENABLE)
-            }
+            event.flags = UInt16(EV_ADD | EV_ENABLE)
             state = .resumed
             update()
         case .resumed:

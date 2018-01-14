@@ -130,22 +130,16 @@ public final class EpollEventSource: EventSource {
     }
     
     internal func signal(_ eof: Bool) {
-        // print("Source.signal(\(eof)) \(state) fd(\(descriptor))")
         callback(eof)
     }
 
     /// Updates the `epoll_event` to the efd handle.
     private func update(op: Int32) {
-        // print("Source.update: \(descriptor) \(op) \(type) \(DefaultEventLoop.current.label)")
         let ctl = epoll_ctl(epfd, op, descriptor, &event);
         if ctl == -1 {
             let reason = String(cString: strerror(errno))
             fatalError("An error occured during EpollEventSource.update: \(reason)")
         }
-    }
-
-    deinit {
-        // print("Source.deinit")
     }
 }
 

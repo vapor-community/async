@@ -35,11 +35,11 @@ public final class KqueueEventSource: EventSource {
         var event = kevent()
         switch type {
         case .read:
-            event.filter = Int16(EVFILT_READ)
+            event.filter = EVFILT_READ
         case .write:
-            event.filter = Int16(EVFILT_WRITE)
+            event.filter = EVFILT_WRITE
         case .timer(let timeout):
-            event.filter = Int16(EVFILT_TIMER)
+            event.filter = EVFILT_TIMER
             event.data = timeout
         }
         event.ident = UInt(dup(descriptor))
@@ -64,7 +64,7 @@ public final class KqueueEventSource: EventSource {
         case .suspended:
             fatalError("Called `.suspend()` on a suspended KqueueEventSource.")
         case .resumed:
-            event.flags = UInt16(EV_ADD | EV_DISABLE)
+            event.flags = EV_ADD | EV_DISABLE
             state = .suspended
             update()
         }
@@ -76,7 +76,7 @@ public final class KqueueEventSource: EventSource {
         case .cancelled:
             fatalError("Called `.resume()` on a cancelled KqueueEventSource.")
         case .suspended:
-            event.flags = UInt16(EV_ADD | EV_ENABLE)
+            event.flags = EV_ADD | EV_ENABLE
             state = .resumed
             update()
         case .resumed:
@@ -89,13 +89,9 @@ public final class KqueueEventSource: EventSource {
         switch state {
         case .cancelled: fatalError("Called `.cancel()` on a cancelled KqueueEventSource.")
         case .resumed, .suspended:
-            event.flags = UInt16(EV_DELETE)
+            event.flags = EV_DELETE
             state = .cancelled
             update()
-
-            // deallocate reference to self
-            pointer.deinitialize()
-            pointer.deallocate(capacity: 1)
         }
     }
 
@@ -116,6 +112,49 @@ public final class KqueueEventSource: EventSource {
             let reason = String(cString: strerror(errno))
             fatalError("An error occured during KqueueEventSource.update: \(reason)")
         }
+    }
+
+    deinit {
+        // deallocate reference to self
+        pointer.deinitialize()
+        pointer.deallocate(capacity: 1)
+    }
+}
+
+let EVFILT_READ = Int16(Darwin.EVFILT_READ)
+let EVFILT_WRITE = Int16(Darwin.EVFILT_WRITE)
+let EVFILT_TIMER = Int16(Darwin.EVFILT_TIMER)
+
+let EV_ADD = UInt16(Darwin.EV_ADD)
+let EV_ENABLE = UInt16(Darwin.EV_ENABLE)
+let EV_DISABLE = UInt16(Darwin.EV_DISABLE)
+let EV_DELETE = UInt16(Darwin.EV_DELETE)
+let EV_EOF = UInt16(Darwin.EV_EOF)
+let EV_ERROR = UInt16(Darwin.EV_ERROR)
+
+extension kevent: CustomStringConvertible {
+    public var description: String {
+        var flags: [String] = []
+        if self.flags & EV_ADD > 0 {
+            flags.append("EV_ADD")
+        }
+        if self.flags & EV_DISABLE > 0 {
+            flags.append("EV_DISABLE")
+        }
+        if self.flags & EV_ENABLE > 0 {
+            flags.append("EV_ENABLE")
+        }
+        if self.flags & EV_DELETE > 0 {
+            flags.append("EV_DELETE")
+        }
+        var filters: [String] = []
+        if self.filter == EVFILT_READ {
+            filters.append("EVFILT_READ")
+        }
+        if self.filter == EVFILT_WRITE {
+            filters.append("EVFILT_WRITE")
+        }
+        return "kevent(fd: \(ident) flags: \(flags.joined(separator: "|")) filters: \(filters.joined(separator: "|"))"
     }
 }
 

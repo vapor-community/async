@@ -34,7 +34,7 @@ public final class SocketSink<Socket>: InputStream
         self.isAwaitingUpstream = false
         let writeSource = self.eventLoop.onWritable(
             descriptor: socket.descriptor,
-            config: .init(trigger: .level),
+            // config: .init(trigger: .level),
             writeSourceSignal
         )
         writeSource.resume()
@@ -62,7 +62,7 @@ public final class SocketSink<Socket>: InputStream
         switch event {
         case .next, .connect:
             guard let writeSource = self.writeSource else {
-                fatalError("SocketSink upstream illegally producing data after cancellation.")
+                fatalError("SocketSink writeSource illegally nil during incoming input.")
             }
             switch writeSource.state {
             case .suspended: writeSource.resume()
@@ -74,8 +74,12 @@ public final class SocketSink<Socket>: InputStream
 
     /// Cancels reading
     public func close() {
+        guard let writeSource = self.writeSource else {
+            fatalError("SocketSink writeSource illegally nil during close.")
+        }
+        writeSource.cancel()
         socket.close()
-        writeSource = nil
+        self.writeSource = nil
         upstream = nil
     }
 

@@ -27,19 +27,19 @@ public final class KqueueEventLoop: EventLoop {
     }
 
     /// See EventLoop.onReadable
-    public func onReadable(descriptor: Int32, config: EventSourceConfig, _ callback: @escaping EventCallback) -> EventSource {
-        return KqueueEventSource(descriptor: descriptor, kq: kq, type: .read, config: config, callback: callback)
+    public func onReadable(descriptor: Int32, /*config: EventSourceConfig,*/ _ callback: @escaping EventCallback) -> EventSource {
+        return KqueueEventSource(descriptor: descriptor, kq: kq, type: .read, config: .init(trigger: .level), callback: callback)
     }
 
     /// See EventLoop.onWritable
-    public func onWritable(descriptor: Int32, config: EventSourceConfig, _ callback: @escaping EventCallback) -> EventSource {
-        return KqueueEventSource(descriptor: descriptor, kq: kq, type: .write, config: config, callback: callback)
+    public func onWritable(descriptor: Int32, /*config: EventSourceConfig,*/ _ callback: @escaping EventCallback) -> EventSource {
+        return KqueueEventSource(descriptor: descriptor, kq: kq, type: .write, config: .init(trigger: .level), callback: callback)
     }
 
 
     /// See EventLoop.onTimeout
-    public func onTimeout(milliseconds: Int, config: EventSourceConfig, _ callback: @escaping EventCallback) -> EventSource {
-        return KqueueEventSource(descriptor: 1, kq: kq, type: .timer(timeout: milliseconds), config: config, callback: callback)
+    public func onTimeout(milliseconds: Int, /*config: EventSourceConfig,*/ _ callback: @escaping EventCallback) -> EventSource {
+        return KqueueEventSource(descriptor: 1, kq: kq, type: .timer(timeout: milliseconds), config: .init(trigger: .level), callback: callback)
     }
 
     /// See EventLoop.run

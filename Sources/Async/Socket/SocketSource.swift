@@ -35,7 +35,7 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
         self.buffer = .init(start: .allocate(capacity: bufferSize), count: bufferSize)
         let readSource = self.eventLoop.onReadable(
             descriptor: socket.descriptor,
-            config: .init(trigger: .level),
+            // config: .init(trigger: .level),
             readSourceSignal
         )
         readSource.resume()
@@ -68,9 +68,13 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
 
     /// Cancels reading
     public func close() {
+        guard let readSource = self.readSource else {
+            fatalError("SocketSource readSource illegally nil during signal.")
+        }
+        readSource.cancel()
         socket.close()
         downstream?.close()
-        readSource = nil
+        self.readSource = nil
         downstream = nil
     }
 

@@ -27,16 +27,16 @@ public protocol EventLoop: Worker {
     /// Creates a new on-read event source.
     /// This callback will be called whenever the descriptor
     /// has data ready to read and the event source is resumed.
-    func onReadable(descriptor: Int32, config: EventSourceConfig, _ callback: @escaping EventCallback) -> EventSource
+    func onReadable(descriptor: Int32, /*config: EventSourceConfig,*/ _ callback: @escaping EventCallback) -> EventSource
 
     /// Creates a new on-write event source.
     /// This callback will be called whenever the descriptor
     /// is ready to write data and the event source is resumed.
-    func onWritable(descriptor: Int32, config: EventSourceConfig, _ callback: @escaping EventCallback) -> EventSource
+    func onWritable(descriptor: Int32, /*config: EventSourceConfig,*/ _ callback: @escaping EventCallback) -> EventSource
 
     /// Creates a new timer event source.
     /// This callback will be called perodically when the timeout is reached.
-    func onTimeout(milliseconds: Int, config: EventSourceConfig, _ callback: @escaping EventCallback) -> EventSource
+    func onTimeout(milliseconds: Int, /*config: EventSourceConfig,*/ _ callback: @escaping EventCallback) -> EventSource
 
     /// Runs a single cycle for this event loop.
     /// Call `EventLoop.runLoop()` to run indefinitely.

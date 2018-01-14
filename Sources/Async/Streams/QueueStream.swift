@@ -23,7 +23,7 @@ public final class QueueStream<I, O>: Stream, ConnectionContext {
     var upstream: ConnectionContext?
 
     /// Creates a new `QueueStream` stream
-    init() {
+    public init() {
         self.inputQueue = []
         self.outputQueue = []
         self.remainingDownstreamRequests = 0

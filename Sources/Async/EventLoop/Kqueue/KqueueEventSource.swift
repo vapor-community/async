@@ -154,7 +154,7 @@ extension kevent: CustomStringConvertible {
         if self.filter == EVFILT_WRITE {
             filters.append("EVFILT_WRITE")
         }
-        return "kevent(fd: \(ident) flags: \(flags.joined(separator: "|")) filters: \(filters.joined(separator: "|")) \(DefaultEventLoop.current.label)"
+        return "kevent(fd: \(ident) flags: \(flags.joined(separator: "|")) filters: \(filters.joined(separator: "|"))"
     }
 }
 

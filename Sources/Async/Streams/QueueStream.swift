@@ -29,6 +29,8 @@ public final class QueueStream<I, O>: Stream, ConnectionContext {
         self.remainingDownstreamRequests = 0
     }
 
+    /// Enqueues a new output to the stream and returns
+    /// a future that will be completed with the next input.
     public func enqueue(_ output: Output) -> Future<Input> {
         let promise = Promise(Input.self)
         self.outputQueue.append(output)
@@ -36,6 +38,11 @@ public final class QueueStream<I, O>: Stream, ConnectionContext {
         upstream?.request()
         update()
         return promise.future
+    }
+
+    @available(*, deprecated, message: "Renamed to enqueue")
+    public func queue(_ output: Output) -> Future<Input> {
+        return enqueue(output)
     }
 
     /// Updates the stream's state. If there are outstanding

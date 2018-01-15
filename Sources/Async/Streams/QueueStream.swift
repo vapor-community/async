@@ -29,10 +29,11 @@ public final class QueueStream<I, O>: Stream, ConnectionContext {
         self.remainingDownstreamRequests = 0
     }
 
-    public func queue(_ output: Output) -> Future<Input> {
+    public func enqueue(_ output: Output) -> Future<Input> {
         let promise = Promise(Input.self)
         self.outputQueue.append(output)
         self.inputQueue.append(promise)
+        upstream?.request()
         update()
         return promise.future
     }
@@ -55,7 +56,6 @@ public final class QueueStream<I, O>: Stream, ConnectionContext {
         case .request(let count):
             let isSuspended = remainingDownstreamRequests == 0
             remainingDownstreamRequests += count
-            upstream?.request(count: count)
             if isSuspended { update() }
         case .cancel:
             /// FIXME: better cancel support
@@ -74,6 +74,7 @@ public final class QueueStream<I, O>: Stream, ConnectionContext {
         switch event {
         case .connect(let upstream):
             self.upstream = upstream
+            upstream.request(count: UInt(inputQueue.count))
         case .next(let input):
             let promise = inputQueue.popLast()!
             promise.complete(input)

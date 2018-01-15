@@ -13,6 +13,11 @@ public final class PushStream<Pushing>: Stream, ConnectionContext {
         consumedBacklog = 0
         downstreamDemand = 0
     }
+
+    /// Pushes a new `Input` into the stream.
+    public func push(_ input: Input) {
+        self.next(input)
+    }
     
     /// Pushes remaining backlog until the downstream demand is 0
     ///
@@ -28,12 +33,12 @@ public final class PushStream<Pushing>: Stream, ConnectionContext {
         while downstreamDemand > 0, consumedBacklog < self.backlog.count {
             let pushed = backlog[consumedBacklog]
             consumedBacklog += 1
-            push(pushed)
+            _push(pushed)
         }
     }
     
     /// Pushes an entity to downstream
-    fileprivate func push(_ entity: Pushing) {
+    fileprivate func _push(_ entity: Pushing) {
         assert(downstreamDemand > 0)
         
         // Decrement in advance to prevent bugs with recursive requesting
@@ -85,7 +90,7 @@ public final class PushStream<Pushing>: Stream, ConnectionContext {
             // Append first, so the `next` doesn't trigger reading more data
             backlog.append(input)
         } else {
-            push(input)
+            _push(input)
         }
         
         // Clean up the backlog buffer

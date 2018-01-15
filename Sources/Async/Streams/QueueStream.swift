@@ -40,7 +40,7 @@ public final class QueueStream<I, O>: Stream, ConnectionContext {
         return promise.future
     }
 
-    @available(*, deprecated, message: "Renamed to enqueue")
+    @available(*, deprecated, renamed: "enqueue")
     public func queue(_ output: Output) -> Future<Input> {
         return enqueue(output)
     }

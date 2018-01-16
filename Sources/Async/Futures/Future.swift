@@ -112,14 +112,25 @@ public struct Future<T>: FutureType {
 /// Thrown when a future is asserted as completed but wasn't completed
 fileprivate struct UncompletedFuture: Error {}
 
+/// Capable of being represented by an optional wrapped type.
+///
+/// This protocol mostly exists to allow constrained extensions on generic
+/// types where an associatedtype is an `Optional<T>`. 
 public protocol OptionalType {
+    /// Underlying wrapped type.
     associatedtype WrappedType
+    
+    /// Returns the wrapped type, if it exists.
     var wrapped: WrappedType? { get }
 }
 
+/// Conform concrete optional to `OptionalType`.
+/// See `OptionalType` for more information.
 extension Optional: OptionalType {
+    /// See `OptionalType.WrappedType`
     public typealias WrappedType = Wrapped
     
+    /// See `OptionalType.wrapped`
     public var wrapped: Wrapped? {
         switch self {
         case .none: return nil
@@ -130,8 +141,8 @@ extension Optional: OptionalType {
 
 
 public extension Future where Expectation: OptionalType {
-    /// Attempt to unwrap a future who's contents are Optional. 
-    /// Throw the supplied Error if nil
+    /// Unwraps an optional value contained inside a Future's expectation.
+    /// If the optional resolves to `nil` (`.none`), the supplied error will be thrown instead.
     public func unwrap(or error: Error) -> Future<Expectation.WrappedType> {
         return map(to: Expectation.WrappedType.self) { optional in
             guard let wrapped = optional.wrapped else {

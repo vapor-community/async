@@ -111,3 +111,34 @@ public struct Future<T>: FutureType {
 
 /// Thrown when a future is asserted as completed but wasn't completed
 fileprivate struct UncompletedFuture: Error {}
+
+public protocol OptionalType {
+    associatedtype WrappedType
+    var wrapped: WrappedType? { get }
+}
+
+extension Optional: OptionalType {
+    public typealias WrappedType = Wrapped
+    
+    public var wrapped: Wrapped? {
+        switch self {
+        case .none: return nil
+        case .some(let w): return w
+        }
+    }
+}
+
+
+public extension Future where Expectation: OptionalType {
+    /// Attempt to unwrap a future who's contents are Optional. 
+    /// Throw the supplied Error if nil
+    public func unwrap(or error: Error) -> Future<Expectation.WrappedType> {
+        return map(to: Expectation.WrappedType.self) { optional in
+            guard let wrapped = optional.wrapped else {
+                throw error
+            }
+            return wrapped
+        }
+    }
+}
+

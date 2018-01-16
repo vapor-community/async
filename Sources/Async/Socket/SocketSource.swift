@@ -105,7 +105,9 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
                 let view = UnsafeBufferPointer<UInt8>(start: buffer.baseAddress, count: count)
                 requestedOutputRemaining -= 1
                 downstream.next(view)
-            case .wouldBlock: fatalError()
+            case .wouldBlock:
+                // we must support wouldBlock (do nothing) on reads for TLS sockets.
+                return
             }
         } catch {
             // any errors that occur here cannot be thrown,

@@ -40,7 +40,6 @@ extension ByteParser {
     /// When output has been achieved, the remainder of the input buffer will be left unused until more output is requested.
     public func translate(input context: inout TranslatingStreamInput<UnsafeBufferPointer<UInt8>>) throws -> TranslatingStreamOutput<Output> {
         guard let input = context.input else {
-            context.close()
             return .insufficient()
         }
 

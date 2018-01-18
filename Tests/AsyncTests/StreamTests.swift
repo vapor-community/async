@@ -516,30 +516,35 @@ public final class ArrayChunkingStream<T>: TranslatingStream {
         self.size = size
     }
 
-    public func translate(input: [T]) -> Future<TranslatingStreamResult<[T]>> {
+    public func translate(input context: inout TranslatingStreamInput<[T]>) -> TranslatingStreamOutput<[T]> {
         switch state {
         case .ready:
+            guard let input = context.input else {
+                return .insufficient()
+            }
             return handle(input)
         case .insufficient(let remainder):
-            let input = remainder + input
-            return handle(input)
+            guard let input = context.input else {
+                return handle(remainder)
+            }
+            return handle(remainder + input)
         case .excess(let input):
             return handle(input)
         }
     }
 
-    private func handle(_ input: [T]) -> Future<TranslatingStreamResult<[T]>> {
+    private func handle(_ input: [T]) -> TranslatingStreamOutput<[T]> {
         if input.count == size {
             state = .ready
-            return Future(.sufficient(input))
+            return .sufficient(input)
         } else if input.count > size {
             let output = [T](input[..<size])
             let remainder = [T](input[size...])
             state = .excess(remainder)
-            return Future(.excess(output))
+            return .excess(output)
         } else {
             state = .insufficient(input)
-            return Future(.insufficient)
+            return .insufficient()
         }
     }
 }

@@ -42,7 +42,7 @@ public final class ByteSerializerState<S> where S: ByteSerializer {
 
 extension ByteSerializer {
     /// Translates the input by serializing it
-    public func translate(input: Input) throws -> Future<TranslatingStreamResult<Output>> {
+    public func translate(input context: inout TranslatingStreamInput<Input>) throws -> TranslatingStreamOutput<Output> {
         // This is a struct, so a nil check is required
         if self.state.streaming != nil {
             let promise = Promise<TranslatingStreamResult<Output>>()
@@ -50,7 +50,12 @@ extension ByteSerializer {
             self.state.streaming?.completing = promise
             self.state.streaming?.upstream.request()
             
-            return promise.future
+            return .init(result: promise.future)
+        }
+
+        guard let input = context.input else {
+            context.close()
+            return .insufficient()
         }
         
         let result = try self.serialize(input, state: self.state.incompleteState)
@@ -59,11 +64,11 @@ extension ByteSerializer {
         case .complete(let buffer):
             self.state.incompleteState = nil
             
-            return Future(.sufficient(buffer))
+            return .sufficient(buffer)
         case .incomplete(let buffer, let state):
             self.state.incompleteState = state
             
-            return Future(.excess(buffer))
+            return .excess(buffer)
         case .awaiting(let stream, let state):
             let promise = Promise<TranslatingStreamResult<Output>>()
             
@@ -89,8 +94,7 @@ extension ByteSerializer {
             )
             
             self.state.streaming?.upstream.request()
-            
-            return promise.future
+            return .init(result: promise.future)
         }
     }
 }

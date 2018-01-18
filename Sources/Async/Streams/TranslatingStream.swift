@@ -22,7 +22,9 @@ extension TranslatingStream {
 
 /// MARK: Input
 
+/// The context supplied to `TranslatingStream.translate`.
 public struct TranslatingStreamInput<Input> {
+    /// Accesses the current input. If `nil`, the input stream has closed.
     public var input: Input? {
         switch condition {
         case .close: return nil
@@ -30,41 +32,58 @@ public struct TranslatingStreamInput<Input> {
         }
     }
 
+    /// Shoudl close storage
     internal var shouldClose: Bool
+
+    /// The internal condition storage.
     internal var condition: TranslatingStreamCondition<Input>
 
+    /// Create a new `TranslatingStreamInput` internally.
     init(condition: TranslatingStreamCondition<Input>) {
         self.condition = condition
         self.shouldClose = false
     }
 
+    /// Manually close downstream.
     public mutating func close() {
         self.shouldClose = true
     }
 }
 
-enum TranslatingStreamCondition<Input> {
+/// All possible translating stream input states.
+internal enum TranslatingStreamCondition<Input> {
     case close
     case next(Input)
 }
 
+
 /// MARK: Output
 
+/// The result of a call to `TranslatingStream.translate`.
+/// Encapsulates all possible asymmetric stream states.
 public struct TranslatingStreamOutput<Output> {
+    /// Internal result type
     internal var result: Future<TranslatingStreamResult<Output>>
 
+    /// The input contains less than one output, i.e. a partial output.
+    /// The next call to `.translate` _must_ give a new input for consumption.
     public static func insufficient() -> TranslatingStreamOutput<Output> {
         return .init(result: Future(.insufficient))
     }
 
+    /// The input contained exactly one output.
+    /// The next call to `.translate` _must_ give a new input for consumption.
     public static func sufficient(_ output: Output) -> TranslatingStreamOutput<Output> {
         return .init(result: Future(.sufficient(output)))
     }
 
+    /// The input contained more than one output, i.e. extraneous data.
+    /// The next call to `.translate` _must_ give the same input for consumption.
     public static func excess(_ output: Output) -> TranslatingStreamOutput<Output> {
         return .init(result: Future(.excess(output)))
     }
 
+    /// Maps a Future to a non-future `TranslatingStreamOutput<Output>` return.
     public static func map<T>(_ future: Future<T>, callback: @escaping (T) -> TranslatingStreamOutput<Output>) -> TranslatingStreamOutput<Output> {
         let future = future.map(to: TranslatingStreamOutput<Output>.self, callback).flatMap(to: TranslatingStreamResult<Output>.self) { output in
             return output.result
@@ -73,19 +92,10 @@ public struct TranslatingStreamOutput<Output> {
     }
 }
 
-/// MARK: Result
-
-/// The result of a call to `TranslatingStream.translate`.
 /// Encapsulates all possible asymmetric stream states.
-enum TranslatingStreamResult<Output> {
-    /// The input contains less than one output, i.e. a partial output.
-    /// The next call to `.translate` _must_ give a new input for consumption.
+internal enum TranslatingStreamResult<Output> {
     case insufficient
-    /// The input contained exactly one output.
-    /// The next call to `.translate` _must_ give a new input for consumption.
     case sufficient(Output)
-    /// The input contained more than one output, i.e. extraneous data.
-    /// The next call to `.translate` _must_ give the same input for consumption.
     case excess(Output)
 }
 
@@ -151,6 +161,7 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
         }
     }
 
+    /// Closes downstream and clears references.
     private func close() {
         downstream?.close()
         downstream = nil

@@ -130,8 +130,8 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
     /// The event loop to dispatch recursive calls.
     private var eventLoop: EventLoop
 
-    /// The current recursion depth.
-    private var recursionDepth: Int
+    /// True if closed
+    private var upstreamIsClosed: Bool
 
     /// Create a new `TranslatingStreamWrapper`.
     /// This is purposefully internal.
@@ -140,7 +140,7 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
         self.translator = translator
         self.eventLoop = worker.eventLoop
         downstreamDemand = 0
-        recursionDepth = 0
+        upstreamIsClosed = true
     }
 
     /// See InputStream.input
@@ -148,13 +148,13 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
         switch event {
         case .close:
             var input = TranslatingStreamInput<Input>(condition: .close)
+            upstreamIsClosed = true
             update(input: &input)
         case .connect(let upstream):
             self.upstream = upstream
         case .error(let error):
             downstream?.error(error)
         case .next(let next):
-            recursionDepth = 0
             self.currentInput = next
             updateCheckingDemand()
         }
@@ -211,13 +211,16 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
             return
         }
 
-        let shouldClose = input.shouldClose
+        var shouldClose = input.shouldClose
         output.result.do { state in
             switch state {
             case .insufficient:
                 /// the translator was unable to provide an output
                 /// after consuming the entirety of the supplied input
                 self.currentInput = nil
+                if self.upstreamIsClosed {
+                    shouldClose = true
+                }
             case .sufficient(let output):
                 /// the input created exactly 1 output.
                 self.currentInput = nil

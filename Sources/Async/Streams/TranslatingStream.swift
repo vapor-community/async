@@ -140,7 +140,7 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
         self.translator = translator
         self.eventLoop = worker.eventLoop
         downstreamDemand = 0
-        upstreamIsClosed = true
+        upstreamIsClosed = false
     }
 
     /// See InputStream.input

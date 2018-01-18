@@ -148,7 +148,6 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
         switch event {
         case .close:
             var input = TranslatingStreamInput<Input>(condition: .close)
-            input.close() // pass close downstream
             update(input: &input)
         case .connect(let upstream):
             self.upstream = upstream

@@ -8,7 +8,7 @@ public protocol TranslatingStream {
 
     /// Convert the `Input` to `Output`.
     /// See `TranslatingStreamResult` for possible cases.
-    func translate(input: Input) throws -> Future<TranslatingStreamResult<Output>>
+    func translate(input: inout TranslatingStreamInput<Input>) throws -> TranslatingStreamOutput<Output>
 }
 
 /// MARK: Stream
@@ -20,19 +20,82 @@ extension TranslatingStream {
     }
 }
 
-/// MARK: Result
+/// MARK: Input
+
+/// The context supplied to `TranslatingStream.translate`.
+public struct TranslatingStreamInput<Input> {
+    /// Accesses the current input. If `nil`, the input stream has closed.
+    public var input: Input? {
+        switch condition {
+        case .close: return nil
+        case .next(let i): return i
+        }
+    }
+
+    /// Shoudl close storage
+    internal var shouldClose: Bool
+
+    /// The internal condition storage.
+    internal var condition: TranslatingStreamCondition<Input>
+
+    /// Create a new `TranslatingStreamInput` internally.
+    init(condition: TranslatingStreamCondition<Input>) {
+        self.condition = condition
+        self.shouldClose = false
+    }
+
+    /// Manually close downstream.
+    public mutating func close() {
+        self.shouldClose = true
+    }
+}
+
+/// All possible translating stream input states.
+internal enum TranslatingStreamCondition<Input> {
+    case close
+    case next(Input)
+}
+
+
+/// MARK: Output
 
 /// The result of a call to `TranslatingStream.translate`.
 /// Encapsulates all possible asymmetric stream states.
-public enum TranslatingStreamResult<Output> {
+public struct TranslatingStreamOutput<Output> {
+    /// Internal result type
+    internal var result: Future<TranslatingStreamResult<Output>>
+
     /// The input contains less than one output, i.e. a partial output.
     /// The next call to `.translate` _must_ give a new input for consumption.
-    case insufficient
+    public static func insufficient() -> TranslatingStreamOutput<Output> {
+        return .init(result: Future(.insufficient))
+    }
+
     /// The input contained exactly one output.
     /// The next call to `.translate` _must_ give a new input for consumption.
-    case sufficient(Output)
+    public static func sufficient(_ output: Output) -> TranslatingStreamOutput<Output> {
+        return .init(result: Future(.sufficient(output)))
+    }
+
     /// The input contained more than one output, i.e. extraneous data.
     /// The next call to `.translate` _must_ give the same input for consumption.
+    public static func excess(_ output: Output) -> TranslatingStreamOutput<Output> {
+        return .init(result: Future(.excess(output)))
+    }
+
+    /// Maps a Future to a non-future `TranslatingStreamOutput<Output>` return.
+    public static func map<T>(_ future: Future<T>, callback: @escaping (T) -> TranslatingStreamOutput<Output>) -> TranslatingStreamOutput<Output> {
+        let future = future.map(to: TranslatingStreamOutput<Output>.self, callback).flatMap(to: TranslatingStreamResult<Output>.self) { output in
+            return output.result
+        }
+        return TranslatingStreamOutput<Output>(result: future)
+    }
+}
+
+/// Encapsulates all possible asymmetric stream states.
+internal enum TranslatingStreamResult<Output> {
+    case insufficient
+    case sufficient(Output)
     case excess(Output)
 }
 
@@ -67,8 +130,8 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
     /// The event loop to dispatch recursive calls.
     private var eventLoop: EventLoop
 
-    /// The current recursion depth.
-    private var recursionDepth: Int
+    /// True if closed
+    private var upstreamIsClosed: Bool
 
     /// Create a new `TranslatingStreamWrapper`.
     /// This is purposefully internal.
@@ -77,25 +140,31 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
         self.translator = translator
         self.eventLoop = worker.eventLoop
         downstreamDemand = 0
-        recursionDepth = 0
+        upstreamIsClosed = false
     }
 
     /// See InputStream.input
     public func input(_ event: InputEvent<Input>) {
         switch event {
         case .close:
-            downstream?.close()
-            downstream = nil
-            upstream = nil
+            var input = TranslatingStreamInput<Input>(condition: .close)
+            upstreamIsClosed = true
+            update(input: &input)
         case .connect(let upstream):
             self.upstream = upstream
         case .error(let error):
             downstream?.error(error)
         case .next(let next):
-            recursionDepth = 0
             self.currentInput = next
-            update()
+            updateCheckingDemand()
         }
+    }
+
+    /// Closes downstream and clears references.
+    private func close() {
+        downstream?.close()
+        downstream = nil
+        upstream = nil
     }
 
     /// See ConnectionContext.connection
@@ -107,7 +176,7 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
             downstream = nil
         case .request(let count):
             downstreamDemand += count
-            update()
+            updateCheckingDemand()
         }
     }
 
@@ -118,32 +187,40 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
     }
 
     /// Updates the stream's state.
-    private func update() {
+    private func updateCheckingDemand() {
         guard downstreamDemand > 0 else {
             return
         }
 
-        guard let input = self.currentInput else {
+        guard let next = self.currentInput else {
             upstream?.request()
             return
         }
-        
-        let state: Future<TranslatingStreamResult<Output>>
-        
+
+        var input = TranslatingStreamInput(condition: .next(next))
+        self.update(input: &input)
+    }
+
+    /// Updates the stream's state.
+    private func update(input: inout TranslatingStreamInput<Input>) {
+        var output: TranslatingStreamOutput<Output>
         do {
-            state = try translator.translate(input: input)
+            output = try translator.translate(input: &input)
         } catch {
             self.error(error)
-            self.close()
             return
         }
 
-        state.do { state in
+        var shouldClose = input.shouldClose
+        output.result.do { state in
             switch state {
             case .insufficient:
                 /// the translator was unable to provide an output
                 /// after consuming the entirety of the supplied input
                 self.currentInput = nil
+                if self.upstreamIsClosed {
+                    shouldClose = true
+                }
             case .sufficient(let output):
                 /// the input created exactly 1 output.
                 self.currentInput = nil
@@ -154,10 +231,14 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
                 self.downstreamDemand -= 1
                 self.downstream?.next(output)
             }
-
-            self.update()
+            if shouldClose {
+                self.close()
+            } else {
+                self.updateCheckingDemand()
+            }
         }.catch { error in
             self.downstream?.error(error)
+            if shouldClose { self.close() }
         }
     }
 }

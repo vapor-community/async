@@ -5,7 +5,7 @@ extension Future {
     ///
     /// This allows you to convert any non-throwing, future-return method into a
     /// closure that accepts throwing and returns a future.
-    public init(_ callback: @escaping () throws -> Future<Expectation>) {
+    public static func flatMap(_ callback: @escaping () throws -> Future<Expectation>) -> Future<Expectation> {
         let promise = Promise<Expectation>()
 
         do {
@@ -21,7 +21,7 @@ extension Future {
             promise.fail(error)
         }
 
-        self = promise.future
+        return promise.future
     }
 
     /// Globally available initializer for mimicking behavior of calling `return future.flatMao`
@@ -29,7 +29,7 @@ extension Future {
     ///
     /// This allows you to convert any non-throwing, future-return method into a
     /// closure that accepts throwing and returns a future.
-    public init(_ callback: @escaping () throws -> Expectation) {
+    public static func map(_ callback: @escaping () throws -> Expectation) -> Future<Expectation> {
         let promise = Promise<Expectation>()
 
         do {
@@ -38,6 +38,6 @@ extension Future {
             promise.fail(error)
         }
 
-        self = promise.future
+        return promise.future
     }
 }

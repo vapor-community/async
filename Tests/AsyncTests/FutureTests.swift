@@ -129,7 +129,7 @@ final class FutureTests : XCTestCase {
     func testFutureClosureInit() throws {
         let future = Future("hello")
         
-        let otherFuture = Future<String> {
+        let otherFuture = Future<String>.flatMap {
             return future
         }
         

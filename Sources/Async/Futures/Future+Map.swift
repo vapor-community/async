@@ -155,7 +155,7 @@ extension Future {
     /// or to re-throw or throw a different error.
     ///
     /// The callback expects a non-Future return (if not throwing instead). See `catchFlatMap` for a Future return.
-    func catchMap(_ callback: @escaping (Error) throws -> (Expectation)) -> Future<Expectation> {
+    public func catchMap(_ callback: @escaping (Error) throws -> (Expectation)) -> Future<Expectation> {
         let promise = Promise(Expectation.self)
         addAwaiter { result in
             switch result {
@@ -189,7 +189,7 @@ extension Future {
     ///          }
     ///      }
     ///
-    func catchFlatMap(_ callback: @escaping (Error) throws -> (Future<Expectation>)) -> Future<Expectation> {
+    public func catchFlatMap(_ callback: @escaping (Error) throws -> (Future<Expectation>)) -> Future<Expectation> {
         let promise = Promise(Expectation.self)
         addAwaiter { result in
             switch result {

@@ -21,6 +21,9 @@ public protocol OptionalType {
 
     /// Returns the wrapped type, if it exists.
     var wrapped: WrappedType? { get }
+
+    /// Creates this optional type from an optional wrapped type.
+    static func makeOptionalType(_ wrapped: WrappedType?) -> Self
 }
 
 /// Conform concrete optional to `OptionalType`.
@@ -35,5 +38,10 @@ extension Optional: OptionalType {
         case .none: return nil
         case .some(let w): return w
         }
+    }
+
+    /// See `OptionalType.makeOptionalType`
+    public static func makeOptionalType(_ wrapped: Wrapped?) -> Optional<Wrapped> {
+        return wrapped
     }
 }

@@ -114,9 +114,6 @@ public final class TranslatingStreamWrapper<Translator>: Stream
     /// An input stream that accepts this stream's output.
     private var downstream: AnyInputStream<Output>?
 
-    /// The outstanding downstream demand.
-    private var downstreamDemand: UInt
-
     /// The source translator stream.
     private var translator: Translator
 
@@ -132,7 +129,6 @@ public final class TranslatingStreamWrapper<Translator>: Stream
     internal init(translator: Translator, on worker: Worker) {
         self.translator = translator
         self.eventLoop = worker.eventLoop
-        downstreamDemand = 0
         upstreamIsClosed = false
     }
 

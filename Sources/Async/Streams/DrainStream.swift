@@ -45,6 +45,10 @@ public final class DrainStream<Draining>: InputStream {
         case .close: onCloseClosure?()
         }
     }
+
+    deinit {
+        print("\(type(of: self)).\(#function)")
+    }
 }
 
 // MARK: Convenience
@@ -71,8 +75,7 @@ extension DrainStream {
     /// Drains the close stream into a closure.
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/streams-introduction/#draining-streams)
-    public func finally(onClose: @escaping DrainStream<Void>.OnClose) -> DrainStream<Input> {
+    public func finally(onClose: @escaping DrainStream<Void>.OnClose) {
         self.onCloseClosure = onClose
-        return self
     }
 }

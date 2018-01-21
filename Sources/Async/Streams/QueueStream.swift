@@ -65,16 +65,6 @@ public final class QueueStream<I, O>: Stream {
         }
     }
 
-//    /// See `ConnectionContext.connection`
-//    public func connection(_ event: ConnectionEvent) {
-//        switch event {
-//        case .cancel: break // handle better
-//        case .request(let count):
-//            downstreamDemand += count
-//            update()
-//        }
-//    }
-
     /// See `InputStream.input`
     public func input(_ event: InputEvent<I>) {
         switch event {

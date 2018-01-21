@@ -1,65 +1,31 @@
 public final class PushStream<Pushing>: Stream {
     public typealias Input = Pushing
     public typealias Output = Pushing
-    
-    var downstreamDemand: UInt
-    var consumedBacklog: Int
+
     var backlog: [Pushing]
     var downstream: AnyInputStream<Pushing>?
+    var isReady: Bool
     
-    public init() {
+    public init(_ type: Pushing.Type = Pushing.self) {
         backlog = []
-        consumedBacklog = 0
-        downstreamDemand = 0
+        isReady = true
     }
 
     /// Pushes a new `Input` into the stream.
     public func push(_ input: Input) {
-        self.next(input, {}) // FIXME
-    }
-    
-    /// Pushes remaining backlog until the downstream demand is 0
-    ///
-    /// Removes pushed backlog afterwards
-    func cleanUpBacklog() {
-        // Defers to prevent removing more than once if called recursively
-        defer {
-            backlog.removeFirst(consumedBacklog)
-            consumedBacklog = 0
-        }
-        
-        // Serialized remainder backlog
-        while downstreamDemand > 0, consumedBacklog < self.backlog.count {
-            let pushed = backlog[consumedBacklog]
-            consumedBacklog += 1
-            _push(pushed)
+        if isReady {
+            isReady = false
+            downstream!.next(input) {
+                self.isReady = true
+                if let last = self.backlog.popLast() {
+                    self.push(last)
+                }
+            }
+        } else {
+            backlog.insert(input, at: 0)
         }
     }
-    
-    /// Pushes an entity to downstream
-    fileprivate func _push(_ entity: Pushing) {
-        assert(downstreamDemand > 0)
-        
-        // Decrement in advance to prevent bugs with recursive requesting
-        downstreamDemand -= 1
-        
-        downstream?.next(entity) {
-            print("ready") // FIXME
-        }
-    }
-    
-//    /// See `ConnectionContext.connection`
-//    public func connection(_ event: ConnectionEvent) {
-//        switch event {
-//        case .request(let amount):
-//            downstreamDemand += amount
-//
-//            cleanUpBacklog()
-//        case .cancel:
-//            self.downstreamDemand = 0
-//        }
-//    }
-//
+
     /// See `InputStream.input`
     public func input(_ event: InputEvent<Input>) {
         switch event {
@@ -68,7 +34,7 @@ public final class PushStream<Pushing>: Stream {
         case .error(let error):
             downstream?.error(error)
         case .next(let input, let ready):
-            self.queue(input)
+            self.push(input)
             ready()
         }
     }
@@ -76,23 +42,5 @@ public final class PushStream<Pushing>: Stream {
     /// See `OutputStream.output`
     public func output<S>(to inputStream: S) where S : InputStream, Output == S.Input {
         downstream = AnyInputStream(inputStream)
-    }
-    
-    /// Queues a new input to the backlog and serializes the first input efficiently
-    fileprivate func queue(_ input: Input) {
-        guard downstreamDemand > 0 else {
-            backlog.append(input)
-            return
-        }
-        
-        if backlog.count > consumedBacklog {
-            // Append first, so the `next` doesn't trigger reading more data
-            backlog.append(input)
-        } else {
-            _push(input)
-        }
-        
-        // Clean up the backlog buffer
-        cleanUpBacklog()
     }
 }

@@ -9,7 +9,7 @@ public final class DrainStream<Draining>: InputStream {
     public typealias Input = Draining
 
     /// Handles input
-    public typealias OnInput = (Input, () -> ()) throws -> ()
+    public typealias OnInput = (Input) throws -> ()
     private var onInputClosure: OnInput?
 
     /// Handles errors
@@ -37,10 +37,11 @@ public final class DrainStream<Draining>: InputStream {
         switch event {
         case .next(let input, let ready):
             do {
-                try onInputClosure?(input, ready)
+                try onInputClosure?(input)
             } catch {
                 onErrorClosure?(error)
             }
+            ready()
         case .error(let error): onErrorClosure?(error)
         case .close: onCloseClosure?()
         }

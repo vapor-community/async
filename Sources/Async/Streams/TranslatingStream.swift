@@ -114,12 +114,6 @@ public final class TranslatingStreamWrapper<Translator>: Stream
     /// An input stream that accepts this stream's output.
     private var downstream: AnyInputStream<Output>?
 
-    /// The currently available input.
-    private var currentInput: Input?
-
-    /// The currently available input.
-    private var currentReady: (() -> ())?
-
     /// The outstanding downstream demand.
     private var downstreamDemand: UInt
 
@@ -148,13 +142,14 @@ public final class TranslatingStreamWrapper<Translator>: Stream
         case .close:
             var input = TranslatingStreamInput<Input>(condition: .close)
             upstreamIsClosed = true
-            update(input: &input)
+            update(input: &input) {
+                // ignore
+            }
         case .error(let error):
             downstream?.error(error)
         case .next(let next, let done):
-            self.currentInput = next
-            self.currentReady = done
-            updateCheckingDemand()
+            var input = TranslatingStreamInput<Input>(condition: .next(next))
+            update(input: &input, done: done)
         }
     }
 
@@ -163,19 +158,6 @@ public final class TranslatingStreamWrapper<Translator>: Stream
         downstream?.close()
         downstream = nil
     }
-//
-//    /// See ConnectionContext.connection
-//    public func connection(_ event: ConnectionEvent) {
-//        switch event {
-//        case .cancel:
-//            upstream?.cancel()
-//            upstream = nil
-//            downstream = nil
-//        case .request(let count):
-//            downstreamDemand += count
-//            updateCheckingDemand()
-//        }
-//    }
 
     /// See OutputStream.output
     public func output<S>(to inputStream: S) where S: InputStream, Output == S.Input {
@@ -183,61 +165,43 @@ public final class TranslatingStreamWrapper<Translator>: Stream
     }
 
     /// Updates the stream's state.
-    private func updateCheckingDemand() {
-        guard downstreamDemand > 0 else {
-            return
-        }
-
-        guard let next = self.currentInput else {
-            return
-        }
-
-        var input = TranslatingStreamInput(condition: .next(next))
-        self.update(input: &input)
-    }
-
-    /// Updates the stream's state.
-    private func update(input: inout TranslatingStreamInput<Input>) {
+    private func update(input: inout TranslatingStreamInput<Input>, done: @escaping () -> ()) {
         var output: TranslatingStreamOutput<Output>
         do {
             output = try translator.translate(input: &input)
         } catch {
             self.error(error)
+            done()
             return
         }
 
-        guard let ready = currentReady else {
-            fatalError()
-        }
-
         var shouldClose = input.shouldClose
+        var input = input
         output.result.do { state in
             switch state {
             case .insufficient:
                 /// the translator was unable to provide an output
                 /// after consuming the entirety of the supplied input
-                self.currentInput = nil
                 if self.upstreamIsClosed {
                     shouldClose = true
                 }
+                done()
             case .sufficient(let output):
                 /// the input created exactly 1 output.
-                self.currentInput = nil
-                self.downstreamDemand -= 1
-                self.downstream?.next(output, ready)
+                self.downstream?.next(output, done)
             case .excess(let output):
                 /// the input contains more than 1 output.
-                self.downstreamDemand -= 1
-                self.downstream?.next(output, ready)
+                self.downstream?.next(output) {
+                    self.update(input: &input, done: done)
+                }
             }
             if shouldClose {
                 self.close()
-            } else {
-                self.updateCheckingDemand()
             }
         }.catch { error in
             self.downstream?.error(error)
             if shouldClose { self.close() }
+            done()
         }
     }
 }

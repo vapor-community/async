@@ -72,7 +72,7 @@ extension ByteSerializer {
             
             self.state.incompleteState = state
             
-            let drain = stream.drain { buffer, upstream in
+            stream.drain { buffer in
                 self.state.streaming?.completing.complete(.excess(buffer))
             }.catch(onError: promise.fail).finally {
                 let completing = self.state.streaming?.completing

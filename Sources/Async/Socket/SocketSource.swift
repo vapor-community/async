@@ -29,7 +29,6 @@ public final class SocketSource<Socket>: OutputStream
 
     /// Creates a new `SocketSource`
     internal init(socket: Socket, on worker: Worker, bufferSize: Int) {
-//        print("\(type(of: self)).\(#function)")
         self.socket = socket
         self.eventLoop = worker.eventLoop
         self.isClosed = false
@@ -40,7 +39,6 @@ public final class SocketSource<Socket>: OutputStream
 
     /// See OutputStream.output
     public func output<S>(to inputStream: S) where S: Async.InputStream, S.Input == UnsafeBufferPointer<UInt8> {
-//        print("\(type(of: self)).\(#function)")
         downstream = AnyInputStream(inputStream)
         guard let readSource = self.readSource else {
             fatalError("SocketSource readSource illegally nil during output.")
@@ -50,7 +48,6 @@ public final class SocketSource<Socket>: OutputStream
 
     /// Cancels reading
     public func close() {
-//        print("\(type(of: self)).\(#function)")
         guard !isClosed else {
             return
         }
@@ -69,7 +66,6 @@ public final class SocketSource<Socket>: OutputStream
     /// important: the socket _must_ be ready to read data
     /// as indicated by a read source.
     private func readData() {
-//        print("\(type(of: self)).\(#function)")
         guard let downstream = self.downstream else {
             fatalError("Unexpected nil downstream on SocketSource during readData.")
         }
@@ -104,7 +100,6 @@ public final class SocketSource<Socket>: OutputStream
 
     /// Called when the read source signals.
     private func readSourceSignal(isCancelled: Bool) {
-//        print("\(type(of: self)).\(#function)")
         guard !isCancelled else {
             // source is cancelled, we will never receive signals again
             close()
@@ -121,7 +116,6 @@ public final class SocketSource<Socket>: OutputStream
 
     /// Deallocated the pointer buffer
     deinit {
-        // print("\(type(of: self)).\(#function)")
         buffer.baseAddress!.deinitialize()
         buffer.baseAddress!.deallocate(capacity: buffer.count)
     }

@@ -52,16 +52,16 @@ public final class TranscribingStreamWrapper<Transcriber>: Stream where Transcri
     public func input(_ event: InputEvent<Input>) {
         switch event {
         case .close:
-            downstream?.close()
+            downstream!.close()
         case .error(let error):
-            downstream?.error(error)
+            downstream!.error(error)
         case .next(let input, let done):
             Future<Output>.flatMap {
                 return try self.transcriber.transcribe(input)
             }.do { value in
-                self.downstream?.next(value, done)
+                self.downstream!.next(value, done)
             }.catch { error in
-                self.downstream?.error(error)
+                self.downstream!.error(error)
                 done()
             }
         }

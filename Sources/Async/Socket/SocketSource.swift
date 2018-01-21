@@ -29,6 +29,7 @@ public final class SocketSource<Socket>: OutputStream
 
     /// Creates a new `SocketSource`
     internal init(socket: Socket, on worker: Worker, bufferSize: Int) {
+        print("\(type(of: self)).\(#function)")
         self.socket = socket
         self.eventLoop = worker.eventLoop
         self.isClosed = false
@@ -39,35 +40,22 @@ public final class SocketSource<Socket>: OutputStream
 
     /// See OutputStream.output
     public func output<S>(to inputStream: S) where S: Async.InputStream, S.Input == UnsafeBufferPointer<UInt8> {
+        print("\(type(of: self)).\(#function)")
         downstream = AnyInputStream(inputStream)
-        readData()
+        guard let readSource = self.readSource else {
+            fatalError("SocketSource readSource illegally nil during output.")
+        }
+        readSource.resume()
     }
-
-//    /// See ConnectionContext.connection
-//    public func connection(_ event: ConnectionEvent) {
-//        switch event {
-//        case .request(let count):
-//            assert(count == 1, "SocketSource downstream must request 1 buffer at a time.")
-//            requestedOutputRemaining += count
-//            // downstream wants output now, resume the read source if necessary
-//            guard let readSource = self.readSource else {
-//                fatalError("SocketSource readSource illegally nil during signal.")
-//            }
-//            switch readSource.state {
-//            case .suspended: readSource.resume()
-//            default: break
-//            }
-//        case .cancel: close()
-//        }
-//    }
 
     /// Cancels reading
     public func close() {
+        print("\(type(of: self)).\(#function)")
         guard !isClosed else {
             return
         }
         guard let readSource = self.readSource else {
-            fatalError("SocketSource readSource illegally nil during signal.")
+            fatalError("SocketSource readSource illegally nil during close.")
         }
         readSource.cancel()
         socket.close()
@@ -81,17 +69,11 @@ public final class SocketSource<Socket>: OutputStream
     /// important: the socket _must_ be ready to read data
     /// as indicated by a read source.
     private func readData() {
+        print("\(type(of: self)).\(#function)")
         guard let downstream = self.downstream else {
             fatalError("Unexpected nil downstream on SocketSource during readData.")
         }
         do {
-            // prepare the socket if necessary
-            guard socket.isPrepared else {
-                try socket.prepareSocket()
-                // make sure to return, since the socket is no longer "ready"
-                return
-            }
-
             let read = try socket.read(into: buffer)
             switch read {
             case .read(let count):
@@ -122,6 +104,7 @@ public final class SocketSource<Socket>: OutputStream
 
     /// Called when the read source signals.
     private func readSourceSignal(isCancelled: Bool) {
+        print("\(type(of: self)).\(#function)")
         guard !isCancelled else {
             // source is cancelled, we will never receive signals again
             close()

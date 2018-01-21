@@ -32,6 +32,7 @@ public final class KqueueEventSource: EventSource {
         type: KqueueEventSourceType,
         callback: @escaping EventCallback
     ) {
+        print("\(Swift.type(of: self)).\(#function)")
         var event = kevent()
         switch type {
         case .read:
@@ -42,7 +43,7 @@ public final class KqueueEventSource: EventSource {
             event.filter = EVFILT_TIMER
             event.data = timeout
         }
-        event.ident = UInt(dup(descriptor))
+        event.ident = UInt(descriptor)
 
         let pointer = UnsafeMutablePointer<KqueueEventSource>.allocate(capacity: 1)
         event.udata = UnsafeMutableRawPointer(pointer)
@@ -58,6 +59,7 @@ public final class KqueueEventSource: EventSource {
 
     /// See EventSource.suspend
     public func suspend() {
+        print("\(type(of: self)).\(#function)")
         switch state {
         case .cancelled:
             fatalError("Called `.suspend()` on a cancelled KqueueEventSource.")
@@ -72,6 +74,7 @@ public final class KqueueEventSource: EventSource {
 
     /// See EventSource.resume
     public func resume() {
+        print("\(type(of: self)).\(#function)")
         switch state {
         case .cancelled:
             fatalError("Called `.resume()` on a cancelled KqueueEventSource.")
@@ -86,17 +89,21 @@ public final class KqueueEventSource: EventSource {
 
     /// See EventSource.cancel
     public func cancel() {
+        print("\(type(of: self)).\(#function)")
         switch state {
         case .cancelled: fatalError("Called `.cancel()` on a cancelled KqueueEventSource.")
         case .resumed, .suspended:
             event.flags = EV_DELETE
             state = .cancelled
             update()
+            /// Decrement reference count to self
+            pointer.deinitialize()
         }
     }
 
     /// Signals the event's callback.
     internal func signal(_ eof: Bool) {
+        print("\(type(of: self)).\(#function)")
         switch state {
         case .resumed:
             callback(eof)
@@ -110,13 +117,16 @@ public final class KqueueEventSource: EventSource {
         let response = kevent(kq, &event, 1, nil, 0, nil)
         if response < 0 {
             let reason = String(cString: strerror(errno))
-            fatalError("An error occured during KqueueEventSource.update: \(reason)")
+            switch errno {
+            case ENOENT: break // event has already been deleted
+            default: fatalError("An error occured during KqueueEventSource.update: \(reason)")
+            }
         }
     }
 
     deinit {
+        print("\(type(of: self)).\(#function)")
         // deallocate reference to self
-        pointer.deinitialize()
         pointer.deallocate(capacity: 1)
     }
 }

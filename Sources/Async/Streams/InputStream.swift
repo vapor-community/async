@@ -24,22 +24,11 @@ public protocol InputStream {
 /// MARK: Event
 
 public enum InputEvent<Input> {
-    /// Invoked after calling `OutputStream.output(to:)`.
-    ///
-    /// No data will start flowing until `OutputRequest.requestOutput` is invoked.
-    ///
-    /// It is the responsibility of this `InputStream` instance to call
-    /// `OutputRequest.requestOutput` whenever more data is wanted.
-    ///
-    /// The `OutputStream` will send notifications only in response to `OutputRequest.requestOutput`.
-    ///
-    /// - parameter outputRequest: `OutputRequest` that allows requesting data via `OutputRequest.requestOutput`
-    case connect(ConnectionContext)
-
     /// Data notification sent by the `OutputStream` in response to requests to `OutputRequest.requestOutput`.
     ///
     /// - parameter input: the element signaled
-    case next(Input)
+    /// - parameter promise: on complete, signals readiness for next input
+    case next(Input, Promise<Void>)
 
     /// Failed terminal state.
     ///
@@ -57,27 +46,18 @@ public enum InputEvent<Input> {
 /// MARK: Convenience
 
 extension InputStream {
-    /// Invoked after calling `OutputStream.output(to:)`.
-    ///
-    /// No data will start flowing until `OutputRequest.requestOutput` is invoked.
-    ///
-    /// It is the responsibility of this `InputStream` instance to call
-    /// `OutputRequest.requestOutput` whenever more data is wanted.
-    ///
-    /// The `OutputStream` will send notifications only in response to `OutputRequest.requestOutput`.
-    ///
-    /// - parameter outputRequest: `OutputRequest` that allows requesting data via `OutputRequest.requestOutput`
-    public func connect(to context: ConnectionContext) {
-        input(.connect(context))
-    }
-
     /// Data notification sent by the `OutputStream` in response to requests to `OutputRequest.requestOutput`.
     ///
     /// - parameter input: the element signaled
-    public func next(_ next: Input) {
-        input(.next(next))
+    public func next(_ next: Input, _ ready: Promise<Void>) {
+        input(.next(next, ready))
     }
 
+    public func next(_ next: Input) -> Future<Void> {
+        let promise = Promise(Void.self)
+        self.next(next, promise)
+        return promise.future
+    }
 
     /// Failed terminal state.
     ///

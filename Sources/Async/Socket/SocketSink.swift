@@ -17,27 +17,22 @@ public final class SocketSink<Socket>: InputStream
     /// Stores write event source.
     private var writeSource: EventSource?
 
-    /// The current request controlling incoming write data
-    private var upstream: ConnectionContext?
-
     /// A strong reference to the current eventloop
     private var eventLoop: EventLoop
 
-    /// True if we are waiting on upstream
-    private var isAwaitingUpstream: Bool
-
     /// True if this sink has been closed
     private var isClosed: Bool
+
+    /// Currently waiting done callback
+    private var currentReadyPromise: Promise<Void>?
 
     /// Creates a new `SocketSink`
     internal init(socket: Socket, on worker: Worker) {
         self.socket = socket
         self.eventLoop = worker.eventLoop
         self.inputBuffer = nil
-        self.isAwaitingUpstream = false
         self.isClosed = false
         let writeSource = self.eventLoop.onWritable(descriptor: socket.descriptor, writeSourceSignal)
-        writeSource.resume()
         self.writeSource = writeSource
     }
 
@@ -45,32 +40,17 @@ public final class SocketSink<Socket>: InputStream
     public func input(_ event: InputEvent<UnsafeBufferPointer<UInt8>>) {
         // update variables
         switch event {
-        case .next(let input):
-            isAwaitingUpstream = false
+        case .next(let input, let ready):
             guard inputBuffer == nil else {
                 fatalError("SocketSink upstream is illegally overproducing input buffers.")
             }
             inputBuffer = input
-        case .connect(let connection):
-            upstream = connection
+            writeData(ready: ready)
         case .close:
             close()
         case .error(let e):
             close()
             fatalError("\(e)")
-        }
-
-        // resume write source if necessary
-        switch event {
-        case .next, .connect:
-            guard let writeSource = self.writeSource else {
-                fatalError("SocketSink writeSource illegally nil during incoming input.")
-            }
-            switch writeSource.state {
-            case .suspended: writeSource.resume()
-            default: break
-            }
-        default: break
         }
     }
 
@@ -85,34 +65,45 @@ public final class SocketSink<Socket>: InputStream
         writeSource.cancel()
         socket.close()
         self.writeSource = nil
-        upstream = nil
         isClosed = true
     }
 
     /// Writes the buffered data to the socket.
-    private func writeData(buffer: UnsafeBufferPointer<UInt8>) {
-        // ensure socket is prepared
-        guard socket.isPrepared else {
-            do {
-                try socket.prepareSocket()
-            } catch {
-                fatalError("\(error)")
+    private func writeData(ready: Promise<Void>) {
+        do {
+            guard let buffer = self.inputBuffer else {
+                fatalError("Unexpected nil SocketSink inputBuffer during writeData")
             }
-            return
-        }
 
-        let write = try! socket.write(from: buffer) // FIXME: add an error handler
-        switch write {
-        case .wrote(let count):
-            switch count {
-            case buffer.count: self.inputBuffer = nil
-            default:
-                inputBuffer = UnsafeBufferPointer<UInt8>(
-                    start: buffer.baseAddress?.advanced(by: count),
-                    count: buffer.count - count
-                )
+            let write = try socket.write(from: buffer) // FIXME: add an error handler
+            switch write {
+            case .wrote(let count):
+                switch count {
+                case buffer.count:
+                    self.inputBuffer = nil
+                    ready.complete()
+                default:
+                    inputBuffer = UnsafeBufferPointer<UInt8>(
+                        start: buffer.baseAddress?.advanced(by: count),
+                        count: buffer.count - count
+                    )
+                    writeData(ready: ready)
+                }
+            case .wouldBlock:
+                guard let writeSource = self.writeSource else {
+                    fatalError("SocketSink writeSource illegally nil during writeData.")
+                }
+
+                // resume for notification when socket is ready again
+                writeSource.resume()
+                guard currentReadyPromise == nil else {
+                    fatalError("SocketSink currentReadyPromise illegally not nil during wouldBlock.")
+                }
+                currentReadyPromise = ready
             }
-        case .wouldBlock: fatalError("SocketSink write illegally returned wouldBlock")
+        } catch {
+            self.error(error)
+            ready.complete()
         }
     }
 
@@ -124,24 +115,16 @@ public final class SocketSink<Socket>: InputStream
             return
         }
 
-        // ensure there's an input buffer to write
-        guard let buffer = inputBuffer else {
-            if let upstream = self.upstream, !isAwaitingUpstream {
-                // there's no input buffer, and we aren't already waiting upstream
-                // request the next buffer
-                isAwaitingUpstream = true
-                upstream.request()
-            } else {
-                guard let writeSource = self.writeSource else {
-                    fatalError("SocketSink writeSource illegally nil during signal.")
-                }
-                // we are waiting on upstream (connect or next data), suspend notifications
-                writeSource.suspend()
-            }
-            return
+        guard let writeSource = self.writeSource else {
+            fatalError("SocketSink writeSource illegally nil during signal.")
         }
+        // always suspend, we will resume on next wouldBlock
+        writeSource.suspend()
 
-        writeData(buffer: buffer)
+        guard let ready = currentReadyPromise else {
+            fatalError("SocketSink currentReadyPromise illegaly nil during signal.")
+        }
+        writeData(ready: ready)
     }
 }
 

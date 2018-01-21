@@ -22,17 +22,14 @@ extension FileReader {
 
         var data = Data()
         
-        let stream = DrainStream(UnsafeBufferPointer<UInt8>.self, onInput: { buffer, upstream in
+        let stream = DrainStream(UnsafeBufferPointer<UInt8>.self, onInput: { buffer in
             let extraData = Data(bytes: buffer.baseAddress!, count: buffer.count)
             data.append(extraData)
-            upstream.request()
         }, onError: promise.fail, onClose: {
             promise.complete(data)
         })
         
         self.read(at: path, into: stream, chunkSize: chunkSize)
-        stream.upstream!.request()
-        
         return promise.future
     }
 }

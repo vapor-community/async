@@ -42,7 +42,7 @@ public final class KqueueEventSource: EventSource {
             event.filter = EVFILT_TIMER
             event.data = timeout
         }
-        event.ident = UInt(dup(descriptor))
+        event.ident = UInt(descriptor)
 
         let pointer = UnsafeMutablePointer<KqueueEventSource>.allocate(capacity: 1)
         event.udata = UnsafeMutableRawPointer(pointer)
@@ -92,6 +92,8 @@ public final class KqueueEventSource: EventSource {
             event.flags = EV_DELETE
             state = .cancelled
             update()
+            /// Decrement reference count to self
+            pointer.deinitialize()
         }
     }
 
@@ -110,13 +112,15 @@ public final class KqueueEventSource: EventSource {
         let response = kevent(kq, &event, 1, nil, 0, nil)
         if response < 0 {
             let reason = String(cString: strerror(errno))
-            fatalError("An error occured during KqueueEventSource.update: \(reason)")
+            switch errno {
+            case ENOENT: break // event has already been deleted
+            default: fatalError("An error occured during KqueueEventSource.update: \(reason)")
+            }
         }
     }
 
     deinit {
         // deallocate reference to self
-        pointer.deinitialize()
         pointer.deallocate(capacity: 1)
     }
 }

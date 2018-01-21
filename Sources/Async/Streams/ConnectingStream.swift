@@ -9,9 +9,6 @@ public final class ConnectingStream<Data>: Async.Stream {
     /// See OutputStream.Output
     public typealias Output = Data
 
-    /// The connected upstream
-    private var upstream: ConnectionContext?
-
     /// The connected downstream
     private var downstream: AnyInputStream<Data>?
 
@@ -22,18 +19,11 @@ public final class ConnectingStream<Data>: Async.Stream {
     public func input(_ event: InputEvent<Data>) {
         if let downstream = self.downstream {
             downstream.input(event)
-        } else {
-            switch event {
-            case .connect(let upstream):
-                self.upstream = upstream
-            default: fatalError("No downstream connected")
-            }
         }
     }
 
     /// See OutputStream.output
     public func output<S>(to inputStream: S) where S : Async.InputStream, S.Input == Data {
         downstream = AnyInputStream(inputStream)
-        upstream.flatMap(inputStream.connect)
     }
 }

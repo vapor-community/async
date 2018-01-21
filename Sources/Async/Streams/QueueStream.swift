@@ -1,21 +1,15 @@
 /// Enqueues a single input and waits for multiple output.
 /// This is useful for situations where one request can lead
 /// to multiple responses.
-public final class QueueStream<I, O>: Stream, ConnectionContext {
+public final class QueueStream<I, O>: Stream {
     /// See `InputStream.Input`
     public typealias Input = I
 
     /// See `OutputStream.Output`
     public typealias Output = O
 
-    /// Current upstream output stream.
-    private var upstream: ConnectionContext?
-
     /// Current downstrema input stream.
     private var downstream: AnyInputStream<Output>?
-
-    /// Current downstream demand.
-    private var downstreamDemand: UInt
 
     /// Queued output.
     private var queuedOutput: [Output]
@@ -28,7 +22,6 @@ public final class QueueStream<I, O>: Stream, ConnectionContext {
 
     /// Create a new `AsymmetricQueueStream`.
     public init() {
-        self.downstreamDemand = 0
         self.queuedOutput = []
         self.queuedInput = []
     }
@@ -41,7 +34,6 @@ public final class QueueStream<I, O>: Stream, ConnectionContext {
         for o in output {
             self.queuedOutput.insert(o, at: 0)
         }
-        upstream!.request(count: 1)
         update()
         return input.promise.future
     }
@@ -60,22 +52,13 @@ public final class QueueStream<I, O>: Stream, ConnectionContext {
 
     /// Updates internal state.
     private func update() {
-        while downstreamDemand > 0 {
-            guard let output = queuedOutput.popLast() else {
-                break
-            }
-            downstreamDemand -= 1
-            downstream!.next(output)
+        guard let output = queuedOutput.popLast() else {
+            return
         }
-    }
-
-    /// See `ConnectionContext.connection`
-    public func connection(_ event: ConnectionEvent) {
-        switch event {
-        case .cancel: break // handle better
-        case .request(let count):
-            downstreamDemand += count
-            update()
+        downstream!.next(output).do {
+            self.update()
+        }.catch { error in
+            self.downstream?.error(error)
         }
     }
 
@@ -83,11 +66,8 @@ public final class QueueStream<I, O>: Stream, ConnectionContext {
     public func input(_ event: InputEvent<I>) {
         switch event {
         case .close: downstream?.close()
-        case .connect(let upstream):
-            self.upstream = upstream
-            update()
         case .error(let error): downstream?.error(error)
-        case .next(let input):
+        case .next(let input, let ready):
             var context: QueueStreamInput<Input>
             if let current = currentInput {
                 context = current
@@ -101,20 +81,18 @@ public final class QueueStream<I, O>: Stream, ConnectionContext {
                 if try context.onInput(input) {
                     currentInput = nil
                     context.promise.complete()
-                } else {
-                    upstream!.request(count: 1)
                 }
             } catch {
                 currentInput = nil
                 context.promise.fail(error)
             }
+            ready.complete()
         }
     }
 
     /// See `OutputStream.output`
     public func output<S>(to inputStream: S) where S : InputStream, S.Input == Output {
         downstream = .init(inputStream)
-        inputStream.connect(to: self)
     }
 }
 
@@ -127,3 +105,4 @@ struct QueueStreamInput<Input> {
         self.onInput = onInput
     }
 }
+

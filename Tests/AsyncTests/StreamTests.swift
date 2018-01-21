@@ -7,11 +7,11 @@ final class StreamTests : XCTestCase {
         var reported = false
         var closed = false
 
-        let numberEmitter = EmitterStream(Int.self)
+        let numberEmitter = PushStream(Int.self)
 
-        let drain = numberEmitter.map(to: Int.self) { num -> Int in
+        numberEmitter.map(to: Int.self) { num -> Int in
             return num * num
-        }.drain { num, upstream in
+        }.drain { num in
             squares.append(num)
             if num == 9 {
                 throw CustomError()
@@ -22,11 +22,10 @@ final class StreamTests : XCTestCase {
         }.finally {
             closed = true
         }
-        drain.upstream!.request(count: .max)
 
-        numberEmitter.emit(1)
-        numberEmitter.emit(2)
-        numberEmitter.emit(3)
+        numberEmitter.push(1)
+        numberEmitter.push(2)
+        numberEmitter.push(3)
 
         numberEmitter.close()
 
@@ -36,39 +35,38 @@ final class StreamTests : XCTestCase {
     }
 
     func testDelta() throws {
-        let numberEmitter = EmitterStream<Int>()
+        let numberEmitter = PushStream(Int.self)
 
         var output: [Int] = []
 
-        let drain = numberEmitter.split { int in
+        numberEmitter.split { int in
             output.append(int)
-        }.drain { int, upstream in
+        }.drain { int in
             output.append(int)
         }.catch { err in
             XCTFail("\(err)")
         }.finally {
             // closed
         }
-        drain.upstream!.request(count: .max)
 
-        numberEmitter.emit(1)
-        numberEmitter.emit(2)
-        numberEmitter.emit(3)
+        numberEmitter.push(1)
+        numberEmitter.push(2)
+        numberEmitter.push(3)
 
         XCTAssertEqual(output, [1, 1, 2, 2, 3, 3])
     }
 
     func testErrorChaining() throws {
-        let numberEmitter = EmitterStream(Int.self)
+        let numberEmitter = PushStream(Int.self)
 
         var results: [Int] = []
         var reported = false
 
-        let drain = numberEmitter.map(to: Int.self) { int in
+        numberEmitter.map(to: Int.self) { int in
             return int * 2
         }.map(to: Int.self) { int in
             return int / 2
-        }.drain { res, upstream in
+        }.drain { res in
             if res == 3 {
                 throw CustomError()
             }
@@ -79,11 +77,10 @@ final class StreamTests : XCTestCase {
         }.finally {
             // closed
         }
-        drain.upstream!.request(count: .max)
 
-        numberEmitter.emit(1)
-        numberEmitter.emit(2)
-        numberEmitter.emit(3)
+        numberEmitter.push(1)
+        numberEmitter.push(2)
+        numberEmitter.push(3)
 
         XCTAssertEqual(results, [1, 2])
         XCTAssert(reported)
@@ -94,27 +91,26 @@ final class StreamTests : XCTestCase {
     }
 
     func testCloseChaining() throws {
-        let numberEmitter = EmitterStream(Int.self)
+        let numberEmitter = PushStream(Int.self)
 
         var results: [Int] = []
         var closed = false
 
-        let drain = numberEmitter.map(to: Int.self) { int in
+        numberEmitter.map(to: Int.self) { int in
             return int * 2
         }.map(to: Int.self) { int in
             return int / 2
-        }.drain{ res, upstream in
+        }.drain{ res in
             results.append(res)
         }.catch { error in
             XCTFail()
         }.finally {
             closed = true
         }
-        drain.upstream!.request(count: .max)
 
-        numberEmitter.emit(1)
-        numberEmitter.emit(2)
-        numberEmitter.emit(3)
+        numberEmitter.push(1)
+        numberEmitter.push(2)
+        numberEmitter.push(3)
 
         numberEmitter.close()
 
@@ -123,13 +119,13 @@ final class StreamTests : XCTestCase {
     }
     
     func testConnectingStream() {
-        let numberEmitter = EmitterStream(Int.self)
+        let numberEmitter = PushStream(Int.self)
         
         var reached = false
         var i = 0
         let max = 100
         
-        let drainStream = DrainStream(Int.self, onInput: { int, upstream in
+        let drainStream = DrainStream(Int.self, onInput: { int in
             XCTAssertEqual(i, int)
         }, onError: { error in
             XCTFail("\(error)")
@@ -140,69 +136,19 @@ final class StreamTests : XCTestCase {
         
         let stream = ConnectingStream<Int>()
         numberEmitter.stream(to: stream).output(to: drainStream)
-        drainStream.upstream!.request(count: .max)
         
         while i < max {
-            numberEmitter.emit(i)
+            numberEmitter.push(i)
             i += 1
         }
         
         numberEmitter.close()
         
-        XCTAssert(reached)
-    }
-    
-    func testClosureStream() {
-        var downstream: AnyInputStream<Int>?
-        var upstream: ConnectionContext?
-        var reached = false
-        var i = 0
-        let max = 100
-        
-        let closureStream = ClosureStream<Int>(onInput: { event in
-            switch event {
-            case .next(let int):
-                downstream?.next(int ^ .max)
-            case .connect(let _upstream):
-                upstream = _upstream
-            case .close:
-                downstream?.close()
-            case .error(let error):
-                XCTFail("\(error)")
-            }
-        }, onOutput: { _downstream in
-            downstream = _downstream
-        }, onConnection: { event in
-            switch event {
-            case .cancel: break
-            case .request(let i):
-                upstream?.request(count: i)
-            }
-        })
-        
-        let numberEmitter = EmitterStream(Int.self)
-        numberEmitter.output(to: closureStream)
-        
-        let drain = closureStream.drain { int, upstream in
-            XCTAssertEqual(int ^ .max, i)
-        }.catch { error in
-            XCTFail("\(error)")
-        }.finally {
-            reached = true
-        }
-        drain.upstream!.request(count: .max)
-        
-        while i < max {
-            numberEmitter.emit(i)
-            i += 1
-        }
-        
-        numberEmitter.close()
         XCTAssert(reached)
     }
 
     func testTranslatingStream() throws {
-        let emitter = EmitterStream([Int].self)
+        let emitter = PushStream([Int].self)
         let loop = try DefaultEventLoop(label: "codes.vapor.test.translating")
 
         let stream = ArrayChunkingStream<Int>(size: 3).stream(on: loop)
@@ -210,43 +156,41 @@ final class StreamTests : XCTestCase {
 
         var chunks: [[Int]] = []
 
-        let drain = stream.drain { chunk, upstream in
+        stream.drain { chunk in
             chunks.append(chunk)
-            upstream.request()
         }.catch { error in
             XCTFail("\(error)")
         }.finally {
             print("closed")
         }
-        drain.upstream!.request()
 
         // test insufficient, then sufficient
         XCTAssertEqual(chunks.count, 0)
-        emitter.emit([1, 2])
+        emitter.push([1, 2])
         XCTAssertEqual(chunks.count, 0)
-        emitter.emit([3])
+        emitter.push([3])
         XCTAssertEqual(chunks.count, 1)
         XCTAssertEqual(chunks[0], [1, 2, 3])
 
         // test sufficient
         XCTAssertEqual(chunks.count, 1)
-        emitter.emit([4, 5, 6])
+        emitter.push([4, 5, 6])
         XCTAssertEqual(chunks.count, 2)
         XCTAssertEqual(chunks[0], [1, 2, 3])
         XCTAssertEqual(chunks[1], [4, 5, 6])
 
         // test insufficient, then excess
         XCTAssertEqual(chunks.count, 2)
-        emitter.emit([7, 8])
+        emitter.push([7, 8])
         XCTAssertEqual(chunks.count, 2)
-        emitter.emit([9, 10])
+        emitter.push([9, 10])
         XCTAssertEqual(chunks.count, 3)
         XCTAssertEqual(chunks[0], [1, 2, 3])
         XCTAssertEqual(chunks[1], [4, 5, 6])
         XCTAssertEqual(chunks[2], [7, 8, 9])
 
         // test excess
-        emitter.emit([11, 12, 13, 14, 15])
+        emitter.push([11, 12, 13, 14, 15])
         XCTAssertEqual(chunks.count, 5)
         XCTAssertEqual(chunks[0], [1, 2, 3])
         XCTAssertEqual(chunks[1], [4, 5, 6])
@@ -262,7 +206,7 @@ final class StreamTests : XCTestCase {
         var closed = false
         
         let pushStream = PushStream<Int>()
-        let drainStream = DrainStream<Int>(onInput: { input, upstream in
+        let drainStream = DrainStream<Int>(onInput: { input in
             XCTAssertEqual(ints[drainOffset], input)
             drainOffset += 1
         }, onClose: {
@@ -272,23 +216,15 @@ final class StreamTests : XCTestCase {
         pushStream.output(to: drainStream)
         
         for int in ints {
-            pushStream.next(int)
+            pushStream.push(int)
         }
-        
-        pushStream.request()
-        XCTAssertEqual(drainOffset, 1)
-        
-        pushStream.request(count: 2)
-        XCTAssertEqual(drainOffset, 3)
-        
+
         ints.append(4)
-        pushStream.next(4)
-        
-        pushStream.request(count: .max)
+        pushStream.push(4)
         XCTAssertEqual(drainOffset, ints.count)
         
         ints.append(5)
-        pushStream.next(5)
+        pushStream.push(5)
         XCTAssertEqual(drainOffset, ints.count)
         
         pushStream.close()
@@ -319,23 +255,22 @@ final class StreamTests : XCTestCase {
         let loop = try DefaultEventLoop(label: "codes.vapor.test.translating")
         
         let parser = SimpleByteParser().stream(on: loop)
-        let emitter = EmitterStream<UnsafeBufferPointer<UInt8>>()
+        let emitter = PushStream<UnsafeBufferPointer<UInt8>>()
         var offset = 0
         var closed = false
         
         emitter.output(to: parser)
         
-        let drain = parser.drain { buffer, upstream in
+        parser.drain { buffer in
             XCTAssertEqual(buffer, cases[offset])
             offset += 1
         }.finally {
             closed = true
             XCTAssertEqual(cases.count, offset)
         }
-        drain.upstream!.request(count: .max)
         
         func emit(_ data: [UInt8]) {
-            data.withUnsafeBufferPointer(emitter.emit)
+            data.withUnsafeBufferPointer(emitter.push)
         }
         
         var data = cases.reduce([], +)
@@ -380,21 +315,20 @@ final class StreamTests : XCTestCase {
         
         let serializer = SimpleByteSerializer().stream(on: loop)
         let parser = SimpleByteParser().stream(on: loop)
-        let emitter = EmitterStream<[[UInt8]]>()
+        let emitter = PushStream<[[UInt8]]>()
         
         var offset = 0
         var closed = false
         
         emitter.stream(to: serializer).output(to: parser)
         
-        let drain = parser.drain { buffer, usptream in
+        parser.drain { buffer in
             XCTAssertEqual(buffer, cases[offset])
             offset += 1
         }.finally {
             closed = true
             XCTAssertEqual(cases.count, offset)
         }
-        drain.upstream!.request(count: .max)
         
         var sent = 0
         var size = 1
@@ -407,7 +341,7 @@ final class StreamTests : XCTestCase {
             size += 1
             sent += consume
             
-            emitter.emit(serialize)
+            emitter.push(serialize)
         }
         
         emitter.close()

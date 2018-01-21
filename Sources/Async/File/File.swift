@@ -5,10 +5,10 @@ import Foundation
 public struct FileError: Error {
     /// See Debuggable.reason
     var reason: String
-    
+
     /// See Debuggable.identifier
     var identifier: String
-    
+
     /// Creates a new file reading error.
     init(identifier: String, reason: String) {
         self.reason = reason
@@ -16,52 +16,43 @@ public struct FileError: Error {
     }
 }
 
-fileprivate final class SingleFile: Async.OutputStream, ConnectionContext {
+fileprivate final class SingleFile: Async.OutputStream {
     typealias Output = UnsafeBufferPointer<UInt8>
-    
+
     let path: String
     var closed = false
     var data: Data?
-    
+
     /// The downstream to stream to
     var downstream: AnyInputStream<Output>?
-    
+
     init(path: String) {
         self.path = path
     }
-    
+
     /// See `OutputStream.output`
     func output<S>(to inputStream: S) where S : InputStream, Output == S.Input {
         self.downstream = AnyInputStream(inputStream)
-        inputStream.connect(to: self)
-    }
-    
-    /// See `ConnectionContext.connection`
-    func connection(_ event: ConnectionEvent) {
-        switch event {
-        case .cancel:
-            self.downstream?.close()
-        case .request(_):
-            guard !closed else { return }
-            closed = true
-            
-            if let data = FileManager.default.contents(atPath: path) {
-                self.data = data
-                
-                data.withUnsafeBytes { (pointer: UnsafePointer<UInt8>) in
-                    let buffer = UnsafeBufferPointer<UInt8>(
-                        start: pointer,
-                        count: data.count
-                    )
-                    
-                    downstream?.next(buffer)
-                }
-            } else {
-                downstream?.error(FileError(identifier: "file-not-found", reason: "The file '\(path)' was not found"))
+        guard !closed else { return }
+        closed = true
+
+        if let data = FileManager.default.contents(atPath: path) {
+            self.data = data
+
+            data.withUnsafeBytes { (pointer: UnsafePointer<UInt8>) in
+                let buffer = UnsafeBufferPointer<UInt8>(
+                    start: pointer,
+                    count: data.count
+                )
+
+                let promise = Promise(Void.self) // we can ignore this result, since we're never sending another output
+                downstream?.next(buffer, promise)
             }
-            
-            downstream?.close()
+        } else {
+            downstream?.error(FileError(identifier: "file-not-found", reason: "The file '\(path)' was not found"))
         }
+
+        downstream?.close()
     }
 }
 
@@ -124,3 +115,4 @@ public final class File: FileReader, FileCache {
         fileprivate var boolValue: Bool { return self }
     }
 #endif
+

@@ -138,14 +138,13 @@ public final class TranslatingStreamWrapper<Translator>: Stream
         case .close:
             var input = TranslatingStreamInput<Input>(condition: .close)
             upstreamIsClosed = true
-            update(input: &input) {
-                // ignore
-            }
+            let promise = Promise(Void.self) // ignore result, since stream is closed
+            update(input: &input, ready: promise)
         case .error(let error):
             downstream?.error(error)
-        case .next(let next, let done):
+        case .next(let next, let ready):
             var input = TranslatingStreamInput<Input>(condition: .next(next))
-            update(input: &input, done: done)
+            update(input: &input, ready: ready)
         }
     }
 
@@ -161,13 +160,13 @@ public final class TranslatingStreamWrapper<Translator>: Stream
     }
 
     /// Updates the stream's state.
-    private func update(input: inout TranslatingStreamInput<Input>, done: @escaping () -> ()) {
+    private func update(input: inout TranslatingStreamInput<Input>, ready: Promise<Void>) {
         var output: TranslatingStreamOutput<Output>
         do {
             output = try translator.translate(input: &input)
         } catch {
             self.error(error)
-            done()
+            ready.complete()
             return
         }
 
@@ -181,14 +180,16 @@ public final class TranslatingStreamWrapper<Translator>: Stream
                 if self.upstreamIsClosed {
                     shouldClose = true
                 }
-                done()
+                ready.complete()
             case .sufficient(let output):
                 /// the input created exactly 1 output.
-                self.downstream?.next(output, done)
+                self.downstream?.next(output, ready)
             case .excess(let output):
                 /// the input contains more than 1 output.
-                self.downstream?.next(output) {
-                    self.update(input: &input, done: done)
+                self.downstream?.next(output).do {
+                    self.update(input: &input, ready: ready)
+                }.catch { error in
+                    ready.fail(error)
                 }
             }
             if shouldClose {
@@ -197,7 +198,7 @@ public final class TranslatingStreamWrapper<Translator>: Stream
         }.catch { error in
             self.downstream?.error(error)
             if shouldClose { self.close() }
-            done()
+            ready.complete()
         }
     }
 }

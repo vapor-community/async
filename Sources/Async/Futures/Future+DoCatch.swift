@@ -24,7 +24,8 @@ extension Future {
     //// Successful results will not call this handler.
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/promise-future-introduction/#on-future-completion)
-    public func `catch`(_ callback: @escaping (Error) -> ()) {
+    @discardableResult
+    public func `catch`(_ callback: @escaping (Error) -> ()) -> Future<T> {
         addAwaiter { result in
             guard let er = result.error else {
                 return
@@ -32,6 +33,8 @@ extension Future {
 
             callback(er)
         }
+        
+        return self
     }
 
     /// Get called back whenever the future is complete,

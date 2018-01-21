@@ -27,7 +27,7 @@ public enum InputEvent<Input> {
     /// Data notification sent by the `OutputStream` in response to requests to `OutputRequest.requestOutput`.
     ///
     /// - parameter input: the element signaled
-    case next(Input, () -> ())
+    case next(Input, Promise<Void>)
 
     /// Failed terminal state.
     ///
@@ -48,13 +48,13 @@ extension InputStream {
     /// Data notification sent by the `OutputStream` in response to requests to `OutputRequest.requestOutput`.
     ///
     /// - parameter input: the element signaled
-    public func next(_ next: Input, _ ready: @escaping () -> ()) {
+    public func next(_ next: Input, _ ready: Promise<Void>) {
         input(.next(next, ready))
     }
 
     public func next(_ next: Input) -> Future<Void> {
         let promise = Promise(Void.self)
-        self.next(next, { promise.complete() })
+        self.next(next, promise)
         return promise.future
     }
 

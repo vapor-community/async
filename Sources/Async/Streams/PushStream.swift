@@ -15,11 +15,13 @@ public final class PushStream<Pushing>: Stream {
     public func push(_ input: Input) {
         if isReady {
             isReady = false
-            downstream!.next(input) {
+            downstream!.next(input).do {
                 self.isReady = true
                 if let last = self.backlog.popLast() {
                     self.push(last)
                 }
+            }.catch { error in
+                self.downstream?.error(error)
             }
         } else {
             backlog.insert(input, at: 0)
@@ -35,7 +37,7 @@ public final class PushStream<Pushing>: Stream {
             downstream?.error(error)
         case .next(let input, let ready):
             self.push(input)
-            ready()
+            ready.complete() // input stream can immidately complete since we are backlogging input
         }
     }
     

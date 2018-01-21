@@ -79,11 +79,13 @@ public final class SocketSource<Socket>: OutputStream
                 }
 
                 let view = UnsafeBufferPointer<UInt8>(start: buffer.baseAddress, count: count)
-                downstream.next(view) {
+                downstream.next(view).always {
                     guard let readSource = self.readSource else {
                         fatalError("SocketSource readSource illegally nil on readData.")
                     }
                     readSource.resume()
+                }.catch { error in
+                    downstream.error(error)
                 }
             case .wouldBlock:
                 guard let readSource = self.readSource else {

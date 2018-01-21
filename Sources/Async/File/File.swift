@@ -45,9 +45,8 @@ fileprivate final class SingleFile: Async.OutputStream {
                     count: data.count
                 )
 
-                downstream?.next(buffer) {
-                    // ignore
-                }
+                let promise = Promise(Void.self) // we can ignore this result, since we're never sending another output
+                downstream?.next(buffer, promise)
             }
         } else {
             downstream?.error(FileError(identifier: "file-not-found", reason: "The file '\(path)' was not found"))

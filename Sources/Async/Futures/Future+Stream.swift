@@ -7,7 +7,7 @@ extension Future {
     public func stream<S: InputStream>(to stream: S) -> Future<Void> where S.Input == Expectation {
         let promise = Promise(Void.self)
         self.do { value in
-            stream.next(value, { promise.complete() })
+            stream.next(value, promise)
         }.catch { error in
             promise.fail(error)
         }

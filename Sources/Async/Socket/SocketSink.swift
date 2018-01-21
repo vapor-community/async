@@ -24,7 +24,7 @@ public final class SocketSink<Socket>: InputStream
     private var isClosed: Bool
 
     /// Currently waiting done callback
-    private var waitingDoneCallback: (() -> ())?
+    private var currentReadyPromise: Promise<Void>?
 
     /// Creates a new `SocketSink`
     internal init(socket: Socket, on worker: Worker) {
@@ -40,12 +40,12 @@ public final class SocketSink<Socket>: InputStream
     public func input(_ event: InputEvent<UnsafeBufferPointer<UInt8>>) {
         // update variables
         switch event {
-        case .next(let input, let done):
+        case .next(let input, let ready):
             guard inputBuffer == nil else {
                 fatalError("SocketSink upstream is illegally overproducing input buffers.")
             }
             inputBuffer = input
-            writeData(done: done)
+            writeData(ready: ready)
         case .close:
             close()
         case .error(let e):
@@ -69,7 +69,7 @@ public final class SocketSink<Socket>: InputStream
     }
 
     /// Writes the buffered data to the socket.
-    private func writeData(done: @escaping () -> ()) {
+    private func writeData(ready: Promise<Void>) {
         do {
             guard let buffer = self.inputBuffer else {
                 fatalError("Unexpected nil SocketSink inputBuffer during writeData")
@@ -81,13 +81,13 @@ public final class SocketSink<Socket>: InputStream
                 switch count {
                 case buffer.count:
                     self.inputBuffer = nil
-                    done()
+                    ready.complete()
                 default:
                     inputBuffer = UnsafeBufferPointer<UInt8>(
                         start: buffer.baseAddress?.advanced(by: count),
                         count: buffer.count - count
                     )
-                    writeData(done: done)
+                    writeData(ready: ready)
                 }
             case .wouldBlock:
                 guard let writeSource = self.writeSource else {
@@ -96,14 +96,14 @@ public final class SocketSink<Socket>: InputStream
 
                 // resume for notification when socket is ready again
                 writeSource.resume()
-                guard waitingDoneCallback == nil else {
-                    fatalError("SocketSink waitingDoneCallback illegally not nil during wouldBlock.")
+                guard currentReadyPromise == nil else {
+                    fatalError("SocketSink currentReadyPromise illegally not nil during wouldBlock.")
                 }
-                waitingDoneCallback = done
+                currentReadyPromise = ready
             }
         } catch {
             self.error(error)
-            done()
+            ready.complete()
         }
     }
 
@@ -121,10 +121,10 @@ public final class SocketSink<Socket>: InputStream
         // always suspend, we will resume on next wouldBlock
         writeSource.suspend()
 
-        guard let done = waitingDoneCallback else {
-            fatalError("SocketSink awaitingReady illegaly nil during signal.")
+        guard let ready = currentReadyPromise else {
+            fatalError("SocketSink currentReadyPromise illegaly nil during signal.")
         }
-        writeData(done: done)
+        writeData(ready: ready)
     }
 }
 

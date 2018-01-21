@@ -11,9 +11,6 @@ public final class QueueStream<I, O>: Stream {
     /// Current downstrema input stream.
     private var downstream: AnyInputStream<Output>?
 
-    /// Current downstream demand.
-    private var downstreamDemand: UInt
-
     /// Queued output.
     private var queuedOutput: [Output]
 
@@ -25,7 +22,6 @@ public final class QueueStream<I, O>: Stream {
 
     /// Create a new `AsymmetricQueueStream`.
     public init() {
-        self.downstreamDemand = 0
         self.queuedOutput = []
         self.queuedInput = []
     }
@@ -56,12 +52,13 @@ public final class QueueStream<I, O>: Stream {
 
     /// Updates internal state.
     private func update() {
-        while downstreamDemand > 0 {
-            guard let output = queuedOutput.popLast() else {
-                break
-            }
-            downstreamDemand -= 1
-            downstream!.next(output, {}) // FIXME
+        guard let output = queuedOutput.popLast() else {
+            return
+        }
+        downstream!.next(output).do {
+            self.update()
+        }.catch { error in
+            self.downstream?.error(error)
         }
     }
 
@@ -70,7 +67,7 @@ public final class QueueStream<I, O>: Stream {
         switch event {
         case .close: downstream?.close()
         case .error(let error): downstream?.error(error)
-        case .next(let input, let done):
+        case .next(let input, let ready):
             var context: QueueStreamInput<Input>
             if let current = currentInput {
                 context = current
@@ -89,7 +86,7 @@ public final class QueueStream<I, O>: Stream {
                 currentInput = nil
                 context.promise.fail(error)
             }
-            done()
+            ready.complete()
         }
     }
 

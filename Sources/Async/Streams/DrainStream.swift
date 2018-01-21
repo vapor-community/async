@@ -41,7 +41,7 @@ public final class DrainStream<Draining>: InputStream {
             } catch {
                 onErrorClosure?(error)
             }
-            ready()
+            ready.complete()
         case .error(let error): onErrorClosure?(error)
         case .close: onCloseClosure?()
         }

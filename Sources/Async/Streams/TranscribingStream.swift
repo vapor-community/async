@@ -55,14 +55,14 @@ public final class TranscribingStreamWrapper<Transcriber>: Stream where Transcri
             downstream!.close()
         case .error(let error):
             downstream!.error(error)
-        case .next(let input, let done):
+        case .next(let input, let ready):
             Future<Output>.flatMap {
                 return try self.transcriber.transcribe(input)
             }.do { value in
-                self.downstream!.next(value, done)
+                self.downstream!.next(value, ready)
             }.catch { error in
                 self.downstream!.error(error)
-                done()
+                ready.complete()
             }
         }
     }

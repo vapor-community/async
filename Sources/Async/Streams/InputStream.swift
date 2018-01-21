@@ -27,6 +27,7 @@ public enum InputEvent<Input> {
     /// Data notification sent by the `OutputStream` in response to requests to `OutputRequest.requestOutput`.
     ///
     /// - parameter input: the element signaled
+    /// - parameter promise: on complete, signals readiness for next input
     case next(Input, Promise<Void>)
 
     /// Failed terminal state.

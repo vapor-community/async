@@ -8,41 +8,48 @@ public final class DrainStream<Draining>: InputStream {
     /// See InputStream.Input
     public typealias Input = Draining
 
-    /// Handles upstream connectect
-    public var upstream: ConnectionContext?
-
     /// Handles input
-    public typealias OnInput = (Input, ConnectionContext) throws -> ()
-    private var onInputClosure: OnInput?
+    public typealias OnInput = (Input) throws -> Future<Void>
+    private var onInputClosure: OnInput
 
     /// Handles errors
     public typealias OnError = (Error) -> ()
-    private var onErrorClosure: OnError?
+    private var onErrorClosure: OnError
 
     /// Handles close
     public typealias OnClose = () -> ()
-    private var onCloseClosure: OnClose?
+    private var onCloseClosure: OnClose
 
     /// Create a new drain stream
     public init(
         _ output: Input.Type = Input.self,
-        onInput: OnInput? = nil,
-        onError: OnError? = nil,
-        onClose: OnClose? = nil
+        onInput: @escaping OnInput,
+        onError: @escaping OnError,
+        onClose: @escaping OnClose
     ) {
         onInputClosure = onInput
         onErrorClosure = onError
         onCloseClosure = onClose
     }
 
-    /// See InputStream.onInput
-    public func input(_ event: InputEvent<Draining>) {
-        switch event {
-        case .connect(let upstream): self.upstream = upstream
-        case .next(let input): do { try onInputClosure?(input, upstream!) } catch { onErrorClosure?(error) }
-        case .error(let error): onErrorClosure?(error)
-        case .close: onCloseClosure?()
+    /// See `InputStream.onInput(_:)`
+    public func onInput(_ next: Input) -> Future<Void> {
+        do {
+            return try onInputClosure(next)
+        } catch {
+            onError(error)
+            return .done
         }
+    }
+
+    /// See `InputStream.onError(_:)`
+    public func onError(_ error: Error) {
+        onErrorClosure(error)
+    }
+
+    /// See `InputStream.onClose(_:)`
+    public func onClose() {
+        onCloseClosure()
     }
 }
 
@@ -53,7 +60,7 @@ extension OutputStream {
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/streams-introduction/#draining-streams)
     public func drain(onInput: @escaping DrainStream<Output>.OnInput) -> DrainStream<Output> {
-        let drain = DrainStream(Output.self, onInput: onInput)
+        let drain = DrainStream(Output.self, onInput: onInput, onError: { _ in }, onClose: { })
         return stream(to: drain)
     }
 }

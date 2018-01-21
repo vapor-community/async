@@ -15,26 +15,26 @@ public protocol FileReader {
     func directoryExists(at path: String) -> Bool
 }
 
-extension FileReader {
-    /// Reads data at the supplied path and combines into one Data.
-    public func read(at path: String, chunkSize: Int) -> Future<Data> {
-        let promise = Promise(Data.self)
-
-        var data = Data()
-        
-        let stream = DrainStream(UnsafeBufferPointer<UInt8>.self, onInput: { buffer, upstream in
-            let extraData = Data(bytes: buffer.baseAddress!, count: buffer.count)
-            data.append(extraData)
-            upstream.request()
-        }, onError: promise.fail, onClose: {
-            promise.complete(data)
-        })
-        
-        self.read(at: path, into: stream, chunkSize: chunkSize)
-        stream.upstream!.request()
-        
-        return promise.future
-    }
-}
+//extension FileReader {
+//    /// Reads data at the supplied path and combines into one Data.
+//    public func read(at path: String, chunkSize: Int) -> Future<Data> {
+//        let promise = Promise(Data.self)
+//
+//        var data = Data()
+//        
+//        let stream = DrainStream(UnsafeBufferPointer<UInt8>.self, onInput: { buffer, upstream in
+//            let extraData = Data(bytes: buffer.baseAddress!, count: buffer.count)
+//            data.append(extraData)
+//            upstream.request()
+//        }, onError: promise.fail, onClose: {
+//            promise.complete(data)
+//        })
+//        
+//        self.read(at: path, into: stream, chunkSize: chunkSize)
+//        stream.upstream!.request()
+//        
+//        return promise.future
+//    }
+//}
 
 public typealias FileOutputStream = AnyOutputStream<UnsafeBufferPointer<UInt8>>

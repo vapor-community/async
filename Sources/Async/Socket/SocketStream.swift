@@ -22,8 +22,18 @@ public final class SocketStream<Socket>: ByteStream where Socket: Async.Socket {
     }
 
     /// See InputStream.input
-    public func input(_ event: InputEvent<UnsafeBufferPointer<UInt8>>) {
-        sink.input(event)
+    public func onInput(_ event: UnsafeBufferPointer<UInt8>) -> Future<Void> {
+        return sink.onInput(event)
+    }
+
+    /// See InputStream.onError
+    public func onError(_ error: Error) {
+        sink.onError(error)
+    }
+
+    /// See InputStream.onClose
+    public func onClose() {
+        sink.onClose()
     }
 
     /// See OutputStream.output

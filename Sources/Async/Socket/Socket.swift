@@ -13,21 +13,21 @@ public protocol Socket {
 
     /// Closes the socket.
     func close()
-
-    /// True if the socket is ready for normal use
-    var isPrepared: Bool { get }
-
-    /// Prepares the socket, called if isPrepared is false.
-    func prepareSocket() throws
+//
+//    /// True if the socket is ready for normal use
+//    var isPrepared: Bool { get }
+//
+//    /// Prepares the socket, called if isPrepared is false.
+//    func prepareSocket() throws
 }
 
-extension Socket {
-    /// See DispatchSocket.isPrepared
-    public var isPrepared: Bool { return true }
-
-    /// See DispatchSocket.prepareSocket
-    public func prepareSocket() throws {}
-}
+//extension Socket {
+//    /// See DispatchSocket.isPrepared
+//    public var isPrepared: Bool { return true }
+//
+//    /// See DispatchSocket.prepareSocket
+//    public func prepareSocket() throws {}
+//}
 
 /// Returned by calls to `Socket.read`
 public enum SocketReadStatus {

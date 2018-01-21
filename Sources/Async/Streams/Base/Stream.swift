@@ -22,9 +22,19 @@ public final class AnyStream<WrappedInput, WrappedOutput>: Stream {
         outputStream = .init(wrapped)
     }
 
-    /// See InputStream.input
-    public func input(_ event: InputEvent<WrappedInput>) {
-        inputStream.input(event)
+    /// See `InputStream.onInput(_:)`
+    public func onInput(_ next: Input) -> Future<Void> {
+        return inputStream.onInput(next)
+    }
+
+    /// See `InputStream.onError(_:)`
+    public func onError(_ error: Error) {
+        inputStream.onError(error)
+    }
+
+    /// See `InputStream.onClose()`
+    public func onClose() {
+        inputStream.onClose()
     }
 
     /// See OutputStream.output

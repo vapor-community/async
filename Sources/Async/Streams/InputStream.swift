@@ -52,6 +52,11 @@ extension InputStream {
         input(.next(next, ready))
     }
 
+    public func next(_ next: Input) -> Future<Void> {
+        let promise = Promise(Void.self)
+        self.next(next, { promise.complete() })
+        return promise.future
+    }
 
     /// Failed terminal state.
     ///

@@ -8,11 +8,8 @@ public final class DrainStream<Draining>: InputStream {
     /// See InputStream.Input
     public typealias Input = Draining
 
-    /// Handles upstream connectect
-    public var upstream: ConnectionContext?
-
     /// Handles input
-    public typealias OnInput = (Input, ConnectionContext) throws -> ()
+    public typealias OnInput = (Input, () -> ()) throws -> ()
     private var onInputClosure: OnInput?
 
     /// Handles errors
@@ -38,8 +35,12 @@ public final class DrainStream<Draining>: InputStream {
     /// See InputStream.onInput
     public func input(_ event: InputEvent<Draining>) {
         switch event {
-        case .connect(let upstream): self.upstream = upstream
-        case .next(let input): do { try onInputClosure?(input, upstream!) } catch { onErrorClosure?(error) }
+        case .next(let input, let ready):
+            do {
+                try onInputClosure?(input, ready)
+            } catch {
+                onErrorClosure?(error)
+            }
         case .error(let error): onErrorClosure?(error)
         case .close: onCloseClosure?()
         }

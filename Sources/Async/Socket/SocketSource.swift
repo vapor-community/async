@@ -2,7 +2,7 @@ import Dispatch
 import Foundation
 
 /// Data stream wrapper for a dispatch socket.
-public final class SocketSource<Socket>: OutputStream, ConnectionContext
+public final class SocketSource<Socket>: OutputStream
     where Socket: Async.Socket
 {
     /// See OutputStream.Output
@@ -20,9 +20,6 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
 
     /// Use a basic stream to easily implement our output stream.
     private var downstream: AnyInputStream<UnsafeBufferPointer<UInt8>>?
-
-    /// The amount of requested output remaining
-    private var requestedOutputRemaining: UInt
     
     /// A strong reference to the current eventloop
     private var eventLoop: EventLoop
@@ -34,37 +31,35 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
     internal init(socket: Socket, on worker: Worker, bufferSize: Int) {
         self.socket = socket
         self.eventLoop = worker.eventLoop
-        self.requestedOutputRemaining = 0
         self.isClosed = false
         self.buffer = .init(start: .allocate(capacity: bufferSize), count: bufferSize)
         let readSource = self.eventLoop.onReadable(descriptor: socket.descriptor, readSourceSignal)
-        readSource.resume()
         self.readSource = readSource
     }
 
     /// See OutputStream.output
     public func output<S>(to inputStream: S) where S: Async.InputStream, S.Input == UnsafeBufferPointer<UInt8> {
         downstream = AnyInputStream(inputStream)
-        inputStream.connect(to: self)
+        readData()
     }
 
-    /// See ConnectionContext.connection
-    public func connection(_ event: ConnectionEvent) {
-        switch event {
-        case .request(let count):
-            assert(count == 1, "SocketSource downstream must request 1 buffer at a time.")
-            requestedOutputRemaining += count
-            // downstream wants output now, resume the read source if necessary
-            guard let readSource = self.readSource else {
-                fatalError("SocketSource readSource illegally nil during signal.")
-            }
-            switch readSource.state {
-            case .suspended: readSource.resume()
-            default: break
-            }
-        case .cancel: close()
-        }
-    }
+//    /// See ConnectionContext.connection
+//    public func connection(_ event: ConnectionEvent) {
+//        switch event {
+//        case .request(let count):
+//            assert(count == 1, "SocketSource downstream must request 1 buffer at a time.")
+//            requestedOutputRemaining += count
+//            // downstream wants output now, resume the read source if necessary
+//            guard let readSource = self.readSource else {
+//                fatalError("SocketSource readSource illegally nil during signal.")
+//            }
+//            switch readSource.state {
+//            case .suspended: readSource.resume()
+//            default: break
+//            }
+//        case .cancel: close()
+//        }
+//    }
 
     /// Cancels reading
     public func close() {
@@ -85,7 +80,10 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
     /// Reads data and outputs to the output stream
     /// important: the socket _must_ be ready to read data
     /// as indicated by a read source.
-    private func readData(to downstream: AnyInputStream<UnsafeBufferPointer<UInt8>>) {
+    private func readData() {
+        guard let downstream = self.downstream else {
+            fatalError("Unexpected nil downstream on SocketSource during readData.")
+        }
         do {
             // prepare the socket if necessary
             guard socket.isPrepared else {
@@ -103,11 +101,17 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
                 }
 
                 let view = UnsafeBufferPointer<UInt8>(start: buffer.baseAddress, count: count)
-                requestedOutputRemaining -= 1
-                downstream.next(view)
+                downstream.next(view) {
+                    guard let readSource = self.readSource else {
+                        fatalError("SocketSource readSource illegally nil on readData.")
+                    }
+                    readSource.resume()
+                }
             case .wouldBlock:
-                // we must support wouldBlock (do nothing) on reads for TLS sockets.
-                return
+                guard let readSource = self.readSource else {
+                    fatalError("SocketSource readSource illegally nil on wouldBlock.")
+                }
+                readSource.resume()
             }
         } catch {
             // any errors that occur here cannot be thrown,
@@ -124,21 +128,12 @@ public final class SocketSource<Socket>: OutputStream, ConnectionContext
             return
         }
 
-        guard requestedOutputRemaining > 0 else {
-            guard let readSource = self.readSource else {
-                fatalError("SocketSource readSource illegally nil during signal.")
-            }
-            // downstream isn't ready for data yet, suspend notifications
-            readSource.suspend()
-            return
+        guard let readSource = self.readSource else {
+            fatalError("SocketSource readSource illegally nil during signal.")
         }
-
-        guard let downstream = self.downstream else {
-            // downstream not setup yet
-            return
-        }
-
-        readData(to: downstream)
+        // always suspend, we will resume on wouldBlock
+        readSource.suspend()
+        readData()
     }
 
     /// Deallocated the pointer buffer

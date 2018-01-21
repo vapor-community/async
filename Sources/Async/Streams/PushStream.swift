@@ -1,11 +1,10 @@
-public final class PushStream<Pushing>: Stream, ConnectionContext {
+public final class PushStream<Pushing>: Stream {
     public typealias Input = Pushing
     public typealias Output = Pushing
     
     var downstreamDemand: UInt
     var consumedBacklog: Int
     var backlog: [Pushing]
-    var upstream: ConnectionContext?
     var downstream: AnyInputStream<Pushing>?
     
     public init() {
@@ -16,7 +15,7 @@ public final class PushStream<Pushing>: Stream, ConnectionContext {
 
     /// Pushes a new `Input` into the stream.
     public func push(_ input: Input) {
-        self.next(input)
+        self.next(input, {}) // FIXME
     }
     
     /// Pushes remaining backlog until the downstream demand is 0
@@ -44,39 +43,39 @@ public final class PushStream<Pushing>: Stream, ConnectionContext {
         // Decrement in advance to prevent bugs with recursive requesting
         downstreamDemand -= 1
         
-        downstream?.next(entity)
-    }
-    
-    /// See `ConnectionContext.connection`
-    public func connection(_ event: ConnectionEvent) {
-        switch event {
-        case .request(let amount):
-            downstreamDemand += amount
-            
-            cleanUpBacklog()
-        case .cancel:
-            self.downstreamDemand = 0
+        downstream?.next(entity) {
+            print("ready") // FIXME
         }
     }
     
+//    /// See `ConnectionContext.connection`
+//    public func connection(_ event: ConnectionEvent) {
+//        switch event {
+//        case .request(let amount):
+//            downstreamDemand += amount
+//
+//            cleanUpBacklog()
+//        case .cancel:
+//            self.downstreamDemand = 0
+//        }
+//    }
+//
     /// See `InputStream.input`
     public func input(_ event: InputEvent<Input>) {
         switch event {
-        case .connect(let context):
-            self.upstream = context
         case .close:
             downstream?.close()
         case .error(let error):
             downstream?.error(error)
-        case .next(let input):
+        case .next(let input, let ready):
             self.queue(input)
+            ready()
         }
     }
     
     /// See `OutputStream.output`
     public func output<S>(to inputStream: S) where S : InputStream, Output == S.Input {
         downstream = AnyInputStream(inputStream)
-        inputStream.connect(to: self)
     }
     
     /// Queues a new input to the backlog and serializes the first input efficiently

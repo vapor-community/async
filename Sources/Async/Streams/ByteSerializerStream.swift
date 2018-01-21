@@ -27,7 +27,6 @@ public enum ByteSerializerResult<S> where S: ByteSerializer {
 /// Keeps track of the states for `ByteSerializerStream`
 public final class ByteSerializerState<S> where S: ByteSerializer {
     fileprivate struct StreamingState {
-        fileprivate var upstream: ConnectionContext
         fileprivate var stream: AnyOutputStream<UnsafeBufferPointer<UInt8>>
         fileprivate var buffer: UnsafeBufferPointer<UInt8>?
         fileprivate var completing: Promise<TranslatingStreamResult<S.Output>>
@@ -48,7 +47,6 @@ extension ByteSerializer {
             let promise = Promise<TranslatingStreamResult<Output>>()
             
             self.state.streaming?.completing = promise
-            self.state.streaming?.upstream.request()
             
             return .init(result: promise.future)
         }
@@ -82,18 +80,12 @@ extension ByteSerializer {
                 completing?.complete(.insufficient)
             }
 
-            guard let upstream = drain.upstream else {
-                fatalError("Upstream `nil` during ByteSerializer.translate")
-            }
-
             self.state.streaming = ByteSerializerState<Self>.StreamingState(
-                upstream: upstream,
                 stream: stream,
                 buffer: nil,
                 completing: promise
             )
-            
-            self.state.streaming?.upstream.request()
+
             return .init(result: promise.future)
         }
     }

@@ -101,7 +101,7 @@ internal enum TranslatingStreamResult<Output> {
 
 /// MARK: Wrapper
 
-public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionContext
+public final class TranslatingStreamWrapper<Translator>: Stream
     where Translator: TranslatingStream
 {
     /// See InputStream.Input
@@ -110,16 +110,15 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
     /// See OutputStream.Output
     public typealias Output = Translator.Output
 
-    /// Reference to the connected upstream.
-    /// An output stream that supplies this stream with input.
-    private var upstream: ConnectionContext?
-
     /// Reference to the connected downstream.
     /// An input stream that accepts this stream's output.
     private var downstream: AnyInputStream<Output>?
 
     /// The currently available input.
     private var currentInput: Input?
+
+    /// The currently available input.
+    private var currentReady: (() -> ())?
 
     /// The outstanding downstream demand.
     private var downstreamDemand: UInt
@@ -150,12 +149,11 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
             var input = TranslatingStreamInput<Input>(condition: .close)
             upstreamIsClosed = true
             update(input: &input)
-        case .connect(let upstream):
-            self.upstream = upstream
         case .error(let error):
             downstream?.error(error)
-        case .next(let next):
+        case .next(let next, let done):
             self.currentInput = next
+            self.currentReady = done
             updateCheckingDemand()
         }
     }
@@ -164,26 +162,24 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
     private func close() {
         downstream?.close()
         downstream = nil
-        upstream = nil
     }
-
-    /// See ConnectionContext.connection
-    public func connection(_ event: ConnectionEvent) {
-        switch event {
-        case .cancel:
-            upstream?.cancel()
-            upstream = nil
-            downstream = nil
-        case .request(let count):
-            downstreamDemand += count
-            updateCheckingDemand()
-        }
-    }
+//
+//    /// See ConnectionContext.connection
+//    public func connection(_ event: ConnectionEvent) {
+//        switch event {
+//        case .cancel:
+//            upstream?.cancel()
+//            upstream = nil
+//            downstream = nil
+//        case .request(let count):
+//            downstreamDemand += count
+//            updateCheckingDemand()
+//        }
+//    }
 
     /// See OutputStream.output
     public func output<S>(to inputStream: S) where S: InputStream, Output == S.Input {
         downstream = AnyInputStream(inputStream)
-        inputStream.connect(to: self)
     }
 
     /// Updates the stream's state.
@@ -193,7 +189,6 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
         }
 
         guard let next = self.currentInput else {
-            upstream?.request()
             return
         }
 
@@ -211,6 +206,10 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
             return
         }
 
+        guard let ready = currentReady else {
+            fatalError()
+        }
+
         var shouldClose = input.shouldClose
         output.result.do { state in
             switch state {
@@ -225,11 +224,11 @@ public final class TranslatingStreamWrapper<Translator>: Stream, ConnectionConte
                 /// the input created exactly 1 output.
                 self.currentInput = nil
                 self.downstreamDemand -= 1
-                self.downstream?.next(output)
+                self.downstream?.next(output, ready)
             case .excess(let output):
                 /// the input contains more than 1 output.
                 self.downstreamDemand -= 1
-                self.downstream?.next(output)
+                self.downstream?.next(output, ready)
             }
             if shouldClose {
                 self.close()

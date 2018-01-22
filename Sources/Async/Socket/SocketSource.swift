@@ -83,7 +83,12 @@ public final class SocketSource<Socket>: OutputStream
                     guard let readSource = self.readSource else {
                         fatalError("SocketSource readSource illegally nil on readData.")
                     }
-                    readSource.resume()
+                    // check state since we might have switched downstreams while waiting
+                    // and that will resume the source
+                    switch readSource.state {
+                    case .suspended: readSource.resume()
+                    default: break
+                    }
                 }.catch { error in
                     downstream.error(error)
                 }

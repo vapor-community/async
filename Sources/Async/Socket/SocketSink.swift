@@ -45,7 +45,15 @@ public final class SocketSink<Socket>: InputStream
                 fatalError("SocketSink upstream is illegally overproducing input buffers.")
             }
             inputBuffer = input
-            writeData(ready: ready)
+            guard currentReadyPromise == nil else {
+                fatalError("SocketSink currentReadyPromise illegally not nil during input.")
+            }
+            currentReadyPromise = ready
+            guard let writeSource = self.writeSource else {
+                fatalError("SocketSink writeSource illegally nil during input.")
+            }
+            // start listening for ready notifications
+            writeSource.resume()
         case .close:
             close()
         case .error(let e):

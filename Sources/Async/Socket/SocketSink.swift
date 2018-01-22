@@ -132,6 +132,7 @@ public final class SocketSink<Socket>: InputStream
         guard let ready = currentReadyPromise else {
             fatalError("SocketSink currentReadyPromise illegaly nil during signal.")
         }
+        currentReadyPromise = nil
         writeData(ready: ready)
     }
 }

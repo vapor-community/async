@@ -31,9 +31,6 @@ public final class MapStream<In, Out>: TranscribingStream {
     /// The stored map closure
     public let map: (In) throws ->  Future<Out>
 
-    /// The upstream stream, if set
-    private var upstream: ConnectionContext?
-
     /// Internal stream
     private var downstream: AnyInputStream<Out>?
 

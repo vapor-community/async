@@ -34,10 +34,6 @@ public final class TranscribingStreamWrapper<Transcriber>: Stream where Transcri
     /// See OutputStream.Output
     public typealias Output = Transcriber.Output
 
-    /// `ConnectionContext` for the connected, upstream
-    /// `OutputStream` that is supplying this stream with input.
-    public var upstream: ConnectionContext?
-
     /// Connected, downstream `InputStream` that is accepting
     /// this stream's output.
     public var downstream: AnyInputStream<Output>?
@@ -56,17 +52,17 @@ public final class TranscribingStreamWrapper<Transcriber>: Stream where Transcri
     public func input(_ event: InputEvent<Input>) {
         switch event {
         case .close:
-            downstream?.close()
-        case .connect(let upstream):
-            self.upstream = upstream
-            downstream?.connect(to: upstream)
+            downstream!.close()
         case .error(let error):
-            downstream?.error(error)
-        case .next(let input):
-            do {
-                try downstream.flatMap(transcriber.transcribe(input).stream)
-            } catch {
-                downstream?.error(error)
+            downstream!.error(error)
+        case .next(let input, let ready):
+            Future<Output>.flatMap {
+                return try self.transcriber.transcribe(input)
+            }.do { value in
+                self.downstream!.next(value, ready)
+            }.catch { error in
+                self.downstream!.error(error)
+                ready.complete()
             }
         }
     }
@@ -74,6 +70,5 @@ public final class TranscribingStreamWrapper<Transcriber>: Stream where Transcri
     /// See OutputStream.output
     public func output<S>(to inputStream: S) where S: InputStream, S.Input == Output {
         downstream = AnyInputStream(inputStream)
-        upstream.flatMap(inputStream.connect)
     }
 }

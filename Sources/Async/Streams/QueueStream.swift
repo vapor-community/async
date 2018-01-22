@@ -20,10 +20,14 @@ public final class QueueStream<I, O>: Stream {
     /// Current input being handled.
     private var currentInput: QueueStreamInput<Input>?
 
+    /// True if we are waiting for a response from downstream
+    private var isAwaitingDownstream: Bool
+
     /// Create a new `AsymmetricQueueStream`.
     public init() {
         self.queuedOutput = []
         self.queuedInput = []
+        isAwaitingDownstream = false
     }
 
     /// Enqueue the supplied output, specifying a closure that will determine
@@ -45,20 +49,27 @@ public final class QueueStream<I, O>: Stream {
         return enqueue([output]) { input in
             capturedInput = input
             return true
-        }.map(to: Input.self) {
-            return capturedInput!
+            }.map(to: Input.self) {
+                return capturedInput!
         }
     }
 
     /// Updates internal state.
     private func update() {
+        guard !isAwaitingDownstream else {
+            return
+        }
+
         guard let output = queuedOutput.popLast() else {
             return
         }
+
+        isAwaitingDownstream = true
         downstream!.next(output).do {
+            self.isAwaitingDownstream = false
             self.update()
-        }.catch { error in
-            self.downstream?.error(error)
+            }.catch { error in
+                self.downstream?.error(error)
         }
     }
 

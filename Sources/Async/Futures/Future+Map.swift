@@ -50,6 +50,20 @@ public func ??<T>(lhs: Future<T?>, rhs: T) -> Future<T> {
     }
 }
 
+/// MARK: Same type
+
+extension Future {
+    /// See `Future.map`
+    public func map(_ callback: @escaping (Expectation) throws -> Expectation) -> Future<Expectation> {
+        return map(to: Expectation.self, callback)
+    }
+
+    /// See `Future.flatMap`
+    public func flatMap(_ callback: @escaping (Expectation) throws -> Future<Expectation>) -> Future<Expectation> {
+        return flatMap(to: Expectation.self, callback)
+    }
+}
+
 /// MARK: Array
 
 extension Array where Element: FutureType {

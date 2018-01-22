@@ -46,10 +46,6 @@ public final class DrainStream<Draining>: InputStream {
         case .close: onCloseClosure?()
         }
     }
-
-    deinit {
-        print("\(type(of: self)).\(#function)")
-    }
 }
 
 // MARK: Convenience

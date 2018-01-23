@@ -82,10 +82,11 @@ public final class QueueStream<I, O>: Stream {
             var context: QueueStreamInput<Input>
             if let current = currentInput {
                 context = current
-            } else {
-                let next = queuedInput.popLast()!
+            } else if let next = queuedInput.popLast() {
                 currentInput = next
                 context = next
+            } else {
+                return
             }
 
             do {

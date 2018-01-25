@@ -1,6 +1,6 @@
 /// A stream of byte buffers.
 public protocol ByteStream: Stream
-    where Input == UnsafeBufferPointer<UInt8>, Output == UnsafeBufferPointer<UInt8> { }
+    where Self.Input == UnsafeBufferPointer<UInt8>, Self.Output == UnsafeBufferPointer<UInt8> { }
 
 extension ByteStream {
     public typealias Input = UnsafeBufferPointer<UInt8>

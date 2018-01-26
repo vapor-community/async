@@ -1,6 +1,8 @@
 import Dispatch
 import Foundation
 
+private let maxExcessSignalCount: Int = 2
+
 /// Data stream wrapper for a dispatch socket.
 public final class SocketSink<Socket>: InputStream
     where Socket: Async.Socket
@@ -26,12 +28,21 @@ public final class SocketSink<Socket>: InputStream
     /// Currently waiting done callback
     private var currentReadyPromise: Promise<Void>?
 
+    /// If true, the read source has been suspended
+    private var sourceIsSuspended: Bool
+
+    /// The current number of signals received while downstream was not ready
+    /// since it was last ready
+    private var excessSignalCount: Int
+
     /// Creates a new `SocketSink`
     internal init(socket: Socket, on worker: Worker) {
         self.socket = socket
         self.eventLoop = worker.eventLoop
         self.inputBuffer = nil
         self.isClosed = false
+        self.sourceIsSuspended = true
+        self.excessSignalCount = 0
         let writeSource = self.eventLoop.onWritable(descriptor: socket.descriptor, writeSourceSignal)
         self.writeSource = writeSource
     }
@@ -49,11 +60,7 @@ public final class SocketSink<Socket>: InputStream
                 fatalError("SocketSink currentReadyPromise illegally not nil during input.")
             }
             currentReadyPromise = ready
-            guard let writeSource = self.writeSource else {
-                fatalError("SocketSink writeSource illegally nil during input.")
-            }
-            // start listening for ready notifications
-            writeSource.resume()
+            resumeIfSuspended()
         case .close:
             close()
         case .error(let e):
@@ -98,12 +105,7 @@ public final class SocketSink<Socket>: InputStream
                     writeData(ready: ready)
                 }
             case .wouldBlock:
-                guard let writeSource = self.writeSource else {
-                    fatalError("SocketSink writeSource illegally nil during writeData.")
-                }
-
-                // resume for notification when socket is ready again
-                writeSource.resume()
+                resumeIfSuspended()
                 guard currentReadyPromise == nil else {
                     fatalError("SocketSink currentReadyPromise illegally not nil during wouldBlock.")
                 }
@@ -123,17 +125,37 @@ public final class SocketSink<Socket>: InputStream
             return
         }
 
-        guard let writeSource = self.writeSource else {
-            fatalError("SocketSink writeSource illegally nil during signal.")
+        guard inputBuffer != nil else {
+            // no data ready for socket yet
+            excessSignalCount += 1
+            if excessSignalCount >= maxExcessSignalCount {
+                guard let writeSource = self.writeSource else {
+                    fatalError("SocketSink writeSource illegally nil during signal.")
+                }
+                writeSource.suspend()
+                sourceIsSuspended = true
+            }
+            return
         }
-        // always suspend, we will resume on next wouldBlock
-        writeSource.suspend()
 
         guard let ready = currentReadyPromise else {
             fatalError("SocketSink currentReadyPromise illegaly nil during signal.")
         }
         currentReadyPromise = nil
         writeData(ready: ready)
+    }
+
+    private func resumeIfSuspended() {
+        guard sourceIsSuspended else {
+            return
+        }
+
+        guard let writeSource = self.writeSource else {
+            fatalError("SocketSink writeSource illegally nil during resumeIfSuspended.")
+        }
+        sourceIsSuspended = false
+        // start listening for ready notifications
+        writeSource.resume()
     }
 }
 

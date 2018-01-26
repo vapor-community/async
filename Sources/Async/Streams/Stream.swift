@@ -13,8 +13,8 @@ public final class AnyStream<WrappedInput, WrappedOutput>: Stream {
 
     /// Combine type erased input and output streams to
     /// create the combined stream.
-    private let inputStream: AnyInputStream<WrappedInput>
-    private let outputStream: AnyOutputStream<WrappedOutput>
+    public let inputStream: AnyInputStream<WrappedInput>
+    public let outputStream: AnyOutputStream<WrappedOutput>
 
     /// Create a new type-erased stream.
     public init<S>(_ wrapped: S) where S: Stream, S.Input == Input, S.Output == Output {

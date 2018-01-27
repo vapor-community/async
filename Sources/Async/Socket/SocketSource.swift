@@ -122,7 +122,7 @@ public final class SocketSource<Socket>: OutputStream
 
         guard downstreamIsReady else {
             // downstream is not ready for data yet
-            excessSignalCount += 1
+            excessSignalCount = excessSignalCount &+ 1
             if excessSignalCount >= maxExcessSignalCount {
                 guard let readSource = self.readSource else {
                     fatalError("SocketSource readSource illegally nil during signal.")

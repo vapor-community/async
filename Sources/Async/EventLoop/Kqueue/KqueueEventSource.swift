@@ -112,7 +112,7 @@ public final class KqueueEventSource: EventSource {
             let reason = String(cString: strerror(errno))
             switch errno {
             case ENOENT: break // event has already been deleted
-            case EBADF: break
+            case EBADF: break // the fd was closed by sibling socket source
             default: fatalError("An error occured during KqueueEventSource.update: \(reason)")
             }
         }

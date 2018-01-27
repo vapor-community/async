@@ -137,7 +137,7 @@ public final class SocketSink<Socket>: InputStream
 
         guard inputBuffer != nil else {
             // no data ready for socket yet
-            excessSignalCount += 1
+            excessSignalCount = excessSignalCount &+ 1
             if excessSignalCount >= maxExcessSignalCount {
                 guard let writeSource = self.writeSource else {
                     fatalError("SocketSink writeSource illegally nil during signal.")

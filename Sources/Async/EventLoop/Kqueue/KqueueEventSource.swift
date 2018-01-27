@@ -92,7 +92,6 @@ public final class KqueueEventSource: EventSource {
             event.flags = EV_DELETE
             state = .cancelled
             update()
-            /// Decrement reference count to self
             pointer.deinitialize()
         }
     }
@@ -100,8 +99,7 @@ public final class KqueueEventSource: EventSource {
     /// Signals the event's callback.
     internal func signal(_ eof: Bool) {
         switch state {
-        case .resumed:
-            callback(eof)
+        case .resumed: callback(eof)
         case .cancelled, .suspended: break
         }
     }
@@ -114,6 +112,7 @@ public final class KqueueEventSource: EventSource {
             let reason = String(cString: strerror(errno))
             switch errno {
             case ENOENT: break // event has already been deleted
+            case EBADF: break // the fd was closed by sibling socket source
             default: fatalError("An error occured during KqueueEventSource.update: \(reason)")
             }
         }

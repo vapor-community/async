@@ -1,6 +1,8 @@
 import Dispatch
 import Foundation
 
+private let maxExcessSignalCount: Int = 2
+
 /// Data stream wrapper for a dispatch socket.
 public final class SocketSource<Socket>: OutputStream
     where Socket: Async.Socket
@@ -27,12 +29,25 @@ public final class SocketSource<Socket>: OutputStream
     /// True if this source has been closed
     private var isClosed: Bool
 
+    /// If true, downstream is ready for data.
+    private var downstreamIsReady: Bool
+
+    /// If true, the read source has been suspended
+    private var sourceIsSuspended: Bool
+
+    /// The current number of signals received while downstream was not ready
+    /// since it was last ready
+    private var excessSignalCount: Int
+
     /// Creates a new `SocketSource`
     internal init(socket: Socket, on worker: Worker, bufferSize: Int) {
         self.socket = socket
         self.eventLoop = worker.eventLoop
         self.isClosed = false
         self.buffer = .init(start: .allocate(capacity: bufferSize), count: bufferSize)
+        self.downstreamIsReady = true
+        self.sourceIsSuspended = true
+        self.excessSignalCount = 0
         let readSource = self.eventLoop.onReadable(descriptor: socket.descriptor, readSourceSignal)
         self.readSource = readSource
     }
@@ -40,10 +55,7 @@ public final class SocketSource<Socket>: OutputStream
     /// See OutputStream.output
     public func output<S>(to inputStream: S) where S: Async.InputStream, S.Input == UnsafeBufferPointer<UInt8> {
         downstream = AnyInputStream(inputStream)
-        guard let readSource = self.readSource else {
-            fatalError("SocketSource readSource illegally nil during output.")
-        }
-        readSource.resume()
+        resumeIfSuspended()
     }
 
     /// Cancels reading
@@ -79,24 +91,19 @@ public final class SocketSource<Socket>: OutputStream
                 }
 
                 let view = UnsafeBufferPointer<UInt8>(start: buffer.baseAddress, count: count)
-                downstream.next(view).always {
-                    guard let readSource = self.readSource else {
-                        fatalError("SocketSource readSource illegally nil on readData.")
+                downstreamIsReady = false
+                let promise = Promise(Void.self)
+                downstream.input(.next(view, promise))
+                promise.future.addAwaiter { result in
+                    switch result {
+                    case .error(let e): downstream.error(e)
+                    case .expectation:
+                        self.downstreamIsReady = true
+                        self.resumeIfSuspended()
                     }
-                    // check state since we might have switched downstreams while waiting
-                    // and that will resume the source
-                    switch readSource.state {
-                    case .suspended: readSource.resume()
-                    default: break
-                    }
-                }.catch { error in
-                    downstream.error(error)
                 }
             case .wouldBlock:
-                guard let readSource = self.readSource else {
-                    fatalError("SocketSource readSource illegally nil on wouldBlock.")
-                }
-                readSource.resume()
+                resumeIfSuspended()
             }
         } catch {
             // any errors that occur here cannot be thrown,
@@ -113,12 +120,35 @@ public final class SocketSource<Socket>: OutputStream
             return
         }
 
-        guard let readSource = self.readSource else {
-            fatalError("SocketSource readSource illegally nil during signal.")
+        guard downstreamIsReady else {
+            // downstream is not ready for data yet
+            excessSignalCount = excessSignalCount &+ 1
+            if excessSignalCount >= maxExcessSignalCount {
+                guard let readSource = self.readSource else {
+                    fatalError("SocketSource readSource illegally nil during signal.")
+                }
+                readSource.suspend()
+                sourceIsSuspended = true
+            }
+            return
         }
-        // always suspend, we will resume on wouldBlock
-        readSource.suspend()
+
+        // downstream ready, reset exces count
+        excessSignalCount = 0
         readData()
+    }
+
+    /// Resumes the readSource if it was currently suspended.
+    private func resumeIfSuspended() {
+        guard sourceIsSuspended else {
+            return
+        }
+
+        guard let readSource = self.readSource else {
+            fatalError("SocketSource readSource illegally nil on resumeIfSuspended.")
+        }
+        sourceIsSuspended = false
+        readSource.resume()
     }
 
     /// Deallocated the pointer buffer

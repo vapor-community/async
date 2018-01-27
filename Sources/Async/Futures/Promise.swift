@@ -16,9 +16,12 @@ public final class Promise<T> {
     }
     
     var result: FutureResult<T>?
+
+    /// The first awaiter, optimization for futures with one awaiter
+    var firstAwaiter: Awaiter?
     
     /// A list of all handlers waiting to
-    var awaiters: [Awaiter]
+    var otherAwaiters: [Awaiter]
     
     var isCompleted: Bool {
         return result != nil
@@ -26,7 +29,7 @@ public final class Promise<T> {
 
     /// Create a new promise.
     public init(_ expectation: T.Type = T.self) {
-        self.awaiters = []
+        self.otherAwaiters = []
     }
 
     /// Fail to fulfill the promise.
@@ -53,13 +56,16 @@ public final class Promise<T> {
             return
         }
         self.result = result
-        
-        for awaiter in awaiters {
+
+        if let awaiter = firstAwaiter {
+            awaiter.callback(result)
+        }
+        for awaiter in otherAwaiters {
             awaiter.callback(result)
         }
         
         // release the awaiters to prevent retain cycles
-        awaiters = []
+        otherAwaiters = []
     }
 }
 

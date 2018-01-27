@@ -53,6 +53,7 @@ extension InputStream {
         input(.next(next, ready))
     }
 
+    @available(*, deprecated, message: "test")
     public func next(_ next: Input) -> Future<Void> {
         let promise = Promise(Void.self)
         self.next(next, promise)

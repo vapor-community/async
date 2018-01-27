@@ -103,7 +103,11 @@ public struct Future<T>: FutureType {
             if let result = promise.result {
                 callback(result)
             } else {
-                promise.awaiters.append(.init(callback: callback))
+                if promise.firstAwaiter == nil {
+                    promise.firstAwaiter = .init(callback: callback)
+                } else {
+                    promise.otherAwaiters.append(.init(callback: callback))
+                }
             }
         }
     }

@@ -35,6 +35,9 @@ public final class SocketSink<Socket>: InputStream
     /// since it was last ready
     private var excessSignalCount: Int
 
+    /// If true, this socket should close on the next signal.
+    private var shouldClose: Bool
+
     /// Creates a new `SocketSink`
     internal init(socket: Socket, on worker: Worker) {
         self.socket = socket
@@ -43,6 +46,7 @@ public final class SocketSink<Socket>: InputStream
         self.isClosed = false
         self.sourceIsSuspended = true
         self.excessSignalCount = 0
+        self.shouldClose = false
         let writeSource = self.eventLoop.onWritable(descriptor: socket.descriptor, writeSourceSignal)
         self.writeSource = writeSource
     }
@@ -62,7 +66,8 @@ public final class SocketSink<Socket>: InputStream
             currentReadyPromise = ready
             resumeIfSuspended()
         case .close:
-            close()
+            shouldClose = true
+            resumeIfSuspended()
         case .error(let e):
             close()
             fatalError("\(e)")
@@ -121,6 +126,11 @@ public final class SocketSink<Socket>: InputStream
     private func writeSourceSignal(isCancelled: Bool) {
         guard !isCancelled else {
             // source is cancelled, we will never receive signals again
+            close()
+            return
+        }
+
+        guard !shouldClose else {
             close()
             return
         }

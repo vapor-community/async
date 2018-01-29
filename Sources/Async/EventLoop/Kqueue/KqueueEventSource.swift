@@ -23,7 +23,7 @@ public final class KqueueEventSource: EventSource {
     private var callback: EventCallback
 
     /// Pointer to this event source to store on kevent
-    private var pointer: UnsafeMutablePointer<KqueueEventSource>
+    private var pointer: UnsafeMutablePointer<KqueueEventSource?>
 
     /// Create a new `KqueueEventSource` for the supplied descriptor.
     internal init(
@@ -44,7 +44,7 @@ public final class KqueueEventSource: EventSource {
         }
         event.ident = UInt(descriptor)
 
-        let pointer = UnsafeMutablePointer<KqueueEventSource>.allocate(capacity: 1)
+        let pointer = UnsafeMutablePointer<KqueueEventSource?>.allocate(capacity: 1)
         event.udata = UnsafeMutableRawPointer(pointer)
 
         self.state = .suspended
@@ -92,7 +92,7 @@ public final class KqueueEventSource: EventSource {
             event.flags = EV_DELETE
             state = .cancelled
             update()
-            pointer.deinitialize()
+            pointer.pointee = nil
         }
     }
 
@@ -112,7 +112,6 @@ public final class KqueueEventSource: EventSource {
             let reason = String(cString: strerror(errno))
             switch errno {
             case ENOENT: break // event has already been deleted
-            case EBADF: break // the fd was closed by sibling socket source
             default: fatalError("An error occured during KqueueEventSource.update: \(reason)")
             }
         }
@@ -120,6 +119,7 @@ public final class KqueueEventSource: EventSource {
 
     deinit {
         // deallocate reference to self
+        pointer.deinitialize()
         pointer.deallocate(capacity: 1)
     }
 }

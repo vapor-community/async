@@ -1,4 +1,5 @@
 import Dispatch
+import COperatingSystem
 import Foundation
 
 private let maxExcessSignalCount: Int = 2
@@ -39,6 +40,9 @@ public final class SocketSource<Socket>: OutputStream
     /// since it was last ready
     private var excessSignalCount: Int
 
+    /// The amount of bytes read from the socket. Only used for `Socket` types
+    private var remainingBytes: Int?
+    
     /// Creates a new `SocketSource`
     internal init(socket: Socket, on worker: Worker, bufferSize: Int) {
         self.socket = socket
@@ -48,6 +52,7 @@ public final class SocketSource<Socket>: OutputStream
         self.downstreamIsReady = true
         self.sourceIsSuspended = true
         self.excessSignalCount = 0
+        self.remainingBytes = socket.size
         let readSource = self.eventLoop.onReadable(descriptor: socket.descriptor, readSourceSignal)
         self.readSource = readSource
     }
@@ -89,8 +94,18 @@ public final class SocketSource<Socket>: OutputStream
                     close()
                     return
                 }
+                
+                let viewSize: Int
 
-                let view = UnsafeBufferPointer<UInt8>(start: buffer.baseAddress, count: count)
+                // If the file has a limit of data that should be read
+                if let remainingBytes = remainingBytes {
+                    viewSize = min(remainingBytes, count)
+                    self.remainingBytes = remainingBytes &- count
+                } else {
+                    viewSize = count
+                }
+                
+                let view = UnsafeBufferPointer<UInt8>(start: buffer.baseAddress, count: viewSize)
                 downstreamIsReady = false
                 let promise = Promise(Void.self)
                 downstream.input(.next(view, promise))
@@ -101,6 +116,11 @@ public final class SocketSource<Socket>: OutputStream
                         self.downstreamIsReady = true
                         self.resumeIfSuspended()
                     }
+                }
+                
+                // If the file is fully read
+                if let remainingBytes = self.remainingBytes, remainingBytes <= 0 {
+                    self.close()
                 }
             case .wouldBlock:
                 resumeIfSuspended()

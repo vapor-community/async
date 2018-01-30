@@ -22,7 +22,7 @@ public final class SocketSource<Socket>: OutputStream
 
     /// Use a basic stream to easily implement our output stream.
     private var downstream: AnyInputStream<UnsafeBufferPointer<UInt8>>?
-    
+
     /// A strong reference to the current eventloop
     private var eventLoop: EventLoop
 
@@ -39,6 +39,8 @@ public final class SocketSource<Socket>: OutputStream
     /// since it was last ready
     private var excessSignalCount: Int
 
+    private var cancelIsPending: Bool
+
     /// Creates a new `SocketSource`
     internal init(socket: Socket, on worker: Worker, bufferSize: Int) {
         self.socket = socket
@@ -47,6 +49,7 @@ public final class SocketSource<Socket>: OutputStream
         self.buffer = .init(start: .allocate(capacity: bufferSize), count: bufferSize)
         self.downstreamIsReady = true
         self.sourceIsSuspended = true
+        self.cancelIsPending = false
         self.excessSignalCount = 0
         let readSource = self.eventLoop.onReadable(descriptor: socket.descriptor, readSourceSignal)
         self.readSource = readSource
@@ -98,8 +101,16 @@ public final class SocketSource<Socket>: OutputStream
                     switch result {
                     case .error(let e): downstream.error(e)
                     case .expectation:
-                        self.downstreamIsReady = true
-                        self.resumeIfSuspended()
+                        if self.cancelIsPending {
+                            // don't both resuming source, it's cancelled.
+                            // continue to read until 0
+                            self.readData()
+                        } else {
+                            // not cancelled yet, just resume the source instead
+                            // of trying to read again to relieve stack pressure
+                            self.downstreamIsReady = true
+                            self.resumeIfSuspended()
+                        }
                     }
                 }
             case .wouldBlock:
@@ -116,7 +127,11 @@ public final class SocketSource<Socket>: OutputStream
     private func readSourceSignal(isCancelled: Bool) {
         guard !isCancelled else {
             // source is cancelled, we will never receive signals again
-            close()
+            if downstreamIsReady {
+                readData()
+            } else {
+                cancelIsPending = true
+            }
             return
         }
 

@@ -83,7 +83,7 @@ public final class KqueueEventLoop: EventLoop {
     }
 
     deinit {
-        eventlist.baseAddress?.deallocate(capacity: eventlist.count)
+        eventlist.baseAddress?.deallocate()
     }
 }
 

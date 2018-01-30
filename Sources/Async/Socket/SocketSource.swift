@@ -169,8 +169,7 @@ public final class SocketSource<Socket>: OutputStream
 
     /// Deallocated the pointer buffer
     deinit {
-        buffer.baseAddress!.deinitialize()
-        buffer.baseAddress!.deallocate(capacity: buffer.count)
+        buffer.baseAddress?.deallocate()
     }
 }
 

@@ -119,8 +119,8 @@ public final class KqueueEventSource: EventSource {
 
     deinit {
         // deallocate reference to self
-        pointer.deinitialize()
-        pointer.deallocate(capacity: 1)
+        pointer.deinitialize(count: 1)
+        pointer.deallocate()
     }
 }
 

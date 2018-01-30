@@ -23,7 +23,7 @@ public final class EpollEventSource: EventSource {
     private var callback: EventCallback
 
     /// Pointer to this event source to store on epoll event
-    private var pointer: UnsafeMutablePointer<EpollEventSource>
+    private var pointer: UnsafeMutablePointer<EpollEventSource?>
 
     /// This source's type
     private let type: EpollEventSourceType
@@ -67,7 +67,7 @@ public final class EpollEventSource: EventSource {
             event.events = EPOLLIN.rawValue
         }
 
-        let pointer = UnsafeMutablePointer<EpollEventSource>.allocate(capacity: 1)
+        let pointer = UnsafeMutablePointer<EpollEventSource?>.allocate(capacity: 1)
         event.data.ptr = UnsafeMutableRawPointer(pointer)
 
         state = .suspended
@@ -124,9 +124,14 @@ public final class EpollEventSource: EventSource {
             }
 
             // deallocate reference to self
-            pointer.deinitialize()
-            pointer.deallocate(capacity: 1)
+            pointer.pointee = nil
         }
+    }
+
+    deinit {
+        // deallocate reference to self
+        pointer.deinitialize(count: 1)
+        pointer.deallocate()
     }
     
     internal func signal(_ eof: Bool) {

@@ -68,7 +68,10 @@ public final class EpollEventLoop: EventLoop {
         /// print("[\(label)] \(eventCount) New Events")
         events: for i in 0..<Int(eventCount) {
             let event = eventlist[i]
-            let source = event.data.ptr.assumingMemoryBound(to: EpollEventSource.self).pointee
+            guard let source = event.data.ptr.assumingMemoryBound(to: EpollEventSource?.self).pointee else {
+                // was cancelled already
+                continue
+            }
 
             guard event.events & EPOLLERR.rawValue == 0 else {
 //                var error: Int32 = 0

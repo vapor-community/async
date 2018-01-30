@@ -39,6 +39,8 @@ public final class SocketSource<Socket>: OutputStream
     /// since it was last ready
     private var excessSignalCount: Int
 
+    /// If true, the source has received EOF signal.
+    /// Event source should no longer be resumed. Keep reading until there is 0 return.
     private var cancelIsPending: Bool
 
     /// Creates a new `SocketSource`
@@ -127,10 +129,9 @@ public final class SocketSource<Socket>: OutputStream
     private func readSourceSignal(isCancelled: Bool) {
         guard !isCancelled else {
             // source is cancelled, we will never receive signals again
+            cancelIsPending = true
             if downstreamIsReady {
                 readData()
-            } else {
-                cancelIsPending = true
             }
             return
         }

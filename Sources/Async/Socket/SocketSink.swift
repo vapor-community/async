@@ -7,6 +7,7 @@ private let maxExcessSignalCount: Int = 2
 public final class SocketSink<Socket>: InputStream
     where Socket: Async.Socket
 {
+    /// Able to handle errors that are thrown to the Sink
     public typealias ErrorHandler = (SocketSink<Socket>, Error) -> ()
     
     /// See InputStream.Input

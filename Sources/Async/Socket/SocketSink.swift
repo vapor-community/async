@@ -7,6 +7,8 @@ private let maxExcessSignalCount: Int = 2
 public final class SocketSink<Socket>: InputStream
     where Socket: Async.Socket
 {
+    public typealias ErrorHandler = (SocketSink<Socket>, Error) -> ()
+    
     /// See InputStream.Input
     public typealias Input = UnsafeBufferPointer<UInt8>
 
@@ -34,15 +36,19 @@ public final class SocketSink<Socket>: InputStream
     /// The current number of signals received while downstream was not ready
     /// since it was last ready
     private var excessSignalCount: Int
+    
+    /// This closure will be called with an error thrown from upstream
+    private let onError: ErrorHandler
 
     /// Creates a new `SocketSink`
-    internal init(socket: Socket, on worker: Worker) {
+    internal init(socket: Socket, on worker: Worker, onError: @escaping ErrorHandler) {
         self.socket = socket
         self.eventLoop = worker.eventLoop
         self.inputBuffer = nil
         self.isClosed = false
         self.sourceIsSuspended = true
         self.excessSignalCount = 0
+        self.onError = onError
         let writeSource = self.eventLoop.onWritable(descriptor: socket.descriptor, writeSourceSignal)
         self.writeSource = writeSource
     }
@@ -64,8 +70,7 @@ public final class SocketSink<Socket>: InputStream
         case .close:
             close()
         case .error(let e):
-            close()
-            fatalError("\(e)")
+            onError(self, e)
         }
     }
 
@@ -162,8 +167,15 @@ public final class SocketSink<Socket>: InputStream
 /// MARK: Create
 
 extension Socket {
+    public func sink(on eventLoop: Worker, onError: @escaping SocketSink<Self>.ErrorHandler) -> SocketSink<Self> {
+        return .init(socket: self, on: eventLoop, onError: onError)
+    }
+    
     /// Creates a data stream for this socket on the supplied event loop.
+    @available(*, deprecated)
     public func sink(on eventLoop: Worker) -> SocketSink<Self> {
-        return .init(socket: self, on: eventLoop)
+        return .init(socket: self, on: eventLoop) { _, error in
+            fatalError("Uncaught error in sink: \(error).")
+        }
     }
 }

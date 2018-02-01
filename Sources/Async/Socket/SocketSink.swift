@@ -176,7 +176,7 @@ extension Socket {
     @available(*, deprecated)
     public func sink(on eventLoop: Worker) -> SocketSink<Self> {
         return .init(socket: self, on: eventLoop) { _, error in
-            fatalError("Uncaught error in sink: \(error).")
+            fatalError("Uncaught error in SocketSink: \(error).")
         }
     }
 }

@@ -37,4 +37,12 @@ extension Socket {
     public func stream(on worker: Worker, onError: @escaping SocketSink<Self>.ErrorHandler) -> SocketStream<Self> {
         return .init(socket: self, on: worker, onError: onError)
     }
+    
+    /// Creates a `SocketStream` for this socket.
+    @available(*, deprecated)
+    public func stream(on worker: Worker) -> SocketStream<Self> {
+        return .init(socket: self, on: worker) { _, error in
+            fatalError("Uncaught error in SocketStream: \(error).")
+        }
+    }
 }

@@ -113,5 +113,28 @@ public struct Future<T>: FutureType {
     }
 }
 
+public extension Future where T: Equatable {
+    /// Assert the value being passed along the chain is equal to the value passed in
+    /// Return true if it is, false if it's not
+    public func assertEquals(_ val: T) -> Future<Bool> {
+        return self.map(to: Bool.self) { (currentVal) in
+            return currentVal == val
+        }
+    }
+}
+
+public extension Future where T == Bool {
+    
+    /// Acts guards against whatever it's being chained with
+    /// If true, continue the chain
+    /// Else, throw the supplied error
+    public func `guard`(elseThrow error: Error) throws -> Future<Bool> {
+        return self.map(to: Bool.self) { (check) in
+            guard check else {throw error}
+            return check
+        }
+    }
+}
+
 /// Thrown when a future is asserted as completed but wasn't completed
 fileprivate struct UncompletedFuture: Error {}

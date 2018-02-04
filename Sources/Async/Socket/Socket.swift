@@ -2,13 +2,6 @@
 public protocol Socket {
     /// The file descriptor.
     var descriptor: Int32 { get }
-    
-    /// The amount of bytes that will be read from this descriptor, if known.
-    ///
-    /// The SocketSource will close after having consumed this amount of bytes, regardless of state.
-    ///
-    /// Particularely useful for regular files
-    var size: Int? { get }
 
     /// Reads a maxiumum of `buffer.count` bytes into the supplied mutable buffer.
     /// Returns the actual number of bytes read.

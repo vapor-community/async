@@ -60,7 +60,10 @@ public final class KqueueEventLoop: EventLoop {
         // signal the events
         events: for i in 0..<Int(eventCount) {
             let event = eventlist[i]
-            let source = event.udata.assumingMemoryBound(to: KqueueEventSource.self).pointee
+            guard let source = event.udata.assumingMemoryBound(to: KqueueEventSource?.self).pointee else {
+                // source has been cancelled
+                return
+            }
             if event.flags & EV_ERROR > 0 {
                 let reason = String(cString: strerror(Int32(event.data)))
                 fatalError("An error occured during an event: \(reason)")
@@ -80,7 +83,7 @@ public final class KqueueEventLoop: EventLoop {
     }
 
     deinit {
-        eventlist.baseAddress?.deallocate(capacity: eventlist.count)
+        eventlist.baseAddress?.deallocate()
     }
 }
 

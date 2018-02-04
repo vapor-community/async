@@ -1,5 +1,4 @@
 import Dispatch
-import COperatingSystem
 import Foundation
 
 private let maxExcessSignalCount: Int = 2
@@ -23,7 +22,7 @@ public final class SocketSource<Socket>: OutputStream
 
     /// Use a basic stream to easily implement our output stream.
     private var downstream: AnyInputStream<UnsafeBufferPointer<UInt8>>?
-    
+
     /// A strong reference to the current eventloop
     private var eventLoop: EventLoop
 
@@ -39,9 +38,10 @@ public final class SocketSource<Socket>: OutputStream
     /// The current number of signals received while downstream was not ready
     /// since it was last ready
     private var excessSignalCount: Int
-
-    /// The amount of bytes read from the socket. Only used for `Socket` types
-    private var remainingBytes: Int?
+    
+    /// If true, the source has received EOF signal.
+    /// Event source should no longer be resumed. Keep reading until there is 0 return.
+    private var cancelIsPending: Bool
     
     /// Creates a new `SocketSource`
     internal init(socket: Socket, on worker: Worker, bufferSize: Int) {
@@ -51,8 +51,8 @@ public final class SocketSource<Socket>: OutputStream
         self.buffer = .init(start: .allocate(capacity: bufferSize), count: bufferSize)
         self.downstreamIsReady = true
         self.sourceIsSuspended = true
+        self.cancelIsPending = false
         self.excessSignalCount = 0
-        self.remainingBytes = socket.size
         let readSource = self.eventLoop.onReadable(descriptor: socket.descriptor, readSourceSignal)
         self.readSource = readSource
     }
@@ -95,17 +95,7 @@ public final class SocketSource<Socket>: OutputStream
                     return
                 }
                 
-                let viewSize: Int
-
-                // If the file has a limit of data that should be read
-                if let remainingBytes = remainingBytes {
-                    viewSize = min(remainingBytes, count)
-                    self.remainingBytes = remainingBytes &- count
-                } else {
-                    viewSize = count
-                }
-                
-                let view = UnsafeBufferPointer<UInt8>(start: buffer.baseAddress, count: viewSize)
+                let view = UnsafeBufferPointer<UInt8>(start: buffer.baseAddress, count: count)
                 downstreamIsReady = false
                 let promise = Promise(Void.self)
                 downstream.input(.next(view, promise))
@@ -113,14 +103,17 @@ public final class SocketSource<Socket>: OutputStream
                     switch result {
                     case .error(let e): downstream.error(e)
                     case .expectation:
-                        self.downstreamIsReady = true
-                        self.resumeIfSuspended()
+                        if self.cancelIsPending {
+                            // don't both resuming source, it's cancelled.
+                            // continue to read until 0
+                            self.readData()
+                        } else {
+                            // not cancelled yet, just resume the source instead
+                            // of trying to read again to relieve stack pressure
+                            self.downstreamIsReady = true
+                            self.resumeIfSuspended()
+                        }
                     }
-                }
-                
-                // If the file is fully read
-                if let remainingBytes = self.remainingBytes, remainingBytes <= 0 {
-                    self.close()
                 }
             case .wouldBlock:
                 resumeIfSuspended()
@@ -136,7 +129,10 @@ public final class SocketSource<Socket>: OutputStream
     private func readSourceSignal(isCancelled: Bool) {
         guard !isCancelled else {
             // source is cancelled, we will never receive signals again
-            close()
+            cancelIsPending = true
+            if downstreamIsReady {
+                readData()
+            }
             return
         }
 
@@ -173,8 +169,7 @@ public final class SocketSource<Socket>: OutputStream
 
     /// Deallocated the pointer buffer
     deinit {
-        buffer.baseAddress!.deinitialize()
-        buffer.baseAddress!.deallocate(capacity: buffer.count)
+        buffer.baseAddress?.deallocate()
     }
 }
 

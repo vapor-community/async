@@ -15,7 +15,7 @@ public struct DirectoryConfig {
     }
 
     /// Creates a directory config with default working directory.
-    public static func `default`() -> DirectoryConfig {
+    public static func detect() -> DirectoryConfig {
         let fileBasedWorkDir: String?
 
         #if Xcode

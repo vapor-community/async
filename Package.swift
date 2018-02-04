@@ -1,6 +1,13 @@
 // swift-tools-version:4.0
 import PackageDescription
 
+let asyncDependencies: [Target.Dependency]
+#if os(Linux)
+asyncDependencies = ["CEpoll"]
+#else
+asyncDependencies = []
+#endif
+
 let package = Package(
     name: "Async",
     products: [
@@ -8,7 +15,7 @@ let package = Package(
     ],
     dependencies: [],
     targets: [
-        .target(name: "Async"),
+        .target(name: "Async", dependencies: asyncDependencies),
         .testTarget(name: "AsyncTests", dependencies: ["Async"]),
     ]
 )

@@ -52,7 +52,7 @@ public func ??<T>(lhs: Future<T?>, rhs: T) -> Future<T> {
 
 /// MARK: Array
 
-extension Array where Element: FutureType {
+extension Collection where Element: FutureType {
     /// See `Future.map`
     public func map<T>(to type: T.Type, _ callback: @escaping ([Element.Expectation]) throws -> T) -> Future<T> {
         return flatten().map(to: T.self, callback)
@@ -64,7 +64,7 @@ extension Array where Element: FutureType {
     }
 }
 
-extension Array where Element == Signal {
+extension Collection where Element == Signal {
     /// See `Future.map`
     public func map<T>(to type: T.Type, _ callback: @escaping () throws -> T) -> Future<T> {
         return flatten().map(to: T.self) { _ in

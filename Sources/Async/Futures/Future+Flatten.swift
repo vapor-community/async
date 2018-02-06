@@ -2,7 +2,7 @@
 public typealias LazyFuture<T> = () -> (Future<T>)
 
 /// FIXME: some way to make this generic?
-extension Array where Element == LazyFuture<Void> {
+extension Collection where Element == LazyFuture<Void> {
     /// Flattens an array of lazy futures into a future with an array of results.
     /// note: each subsequent future will wait for the previous to
     /// complete before starting.
@@ -34,7 +34,7 @@ extension Array where Element == LazyFuture<Void> {
     }
 }
 
-extension Array where Element : FutureType {
+extension Collection where Element : FutureType {
     /// Flattens an array of futures into a future with an array of results.
     /// note: the order of the results will match the order of the
     /// futures in the input array.
@@ -68,7 +68,7 @@ extension Array where Element : FutureType {
     }
 }
 
-extension Array where Element == Signal {
+extension Collection where Element == Signal {
     /// Flattens an array of void futures into a single one.
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/advanced-futures/#combining-multiple-futures)

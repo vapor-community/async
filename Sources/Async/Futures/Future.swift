@@ -121,6 +121,14 @@ public extension Future where T: Equatable {
             return currentVal == val
         }
     }
+    
+    /// Assert the value being passed along the chain is equal to one of many values
+    /// Return true if it is, false if it's not
+    public func assertEquals(_ vals: T...) -> Future<Bool> {
+        return self.map(to: Bool.self) { (currentVal) in
+            return vals.contains(currentVal)
+        }
+    }
 }
 
 public extension Future where T == Bool {

@@ -136,6 +136,7 @@ public extension Future where T == Bool {
     /// Acts guards against whatever it's being chained with
     /// If true, continue the chain
     /// Else, throw the supplied error
+    @discardableResult
     public func `guard`(elseThrow error: Error) -> Future<Bool> {
         return self.map(to: Bool.self) { (check) in
             guard check else {throw error}

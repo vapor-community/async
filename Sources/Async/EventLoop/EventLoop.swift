@@ -36,11 +36,18 @@ public protocol EventLoop: Worker {
 
     /// Creates a new timer event source.
     /// This callback will be called perodically when the timeout is reached.
-    func onTimeout(milliseconds: Int, _ callback: @escaping EventCallback) -> EventSource
+    func onTimeout(timeout: EventLoopTimeout, _ callback: @escaping EventCallback) -> EventSource
+
+    /// Creates a new one-shot event source.
+    /// This callback will be called once on the next tick of the event loop.
+    func onNextTick(_ callback: @escaping EventCallback) -> EventSource
 
     /// Runs a single cycle for this event loop.
     /// Call `EventLoop.runLoop()` to run indefinitely.
-    func run()
+    func run(timeout: EventLoopTimeout?)
+
+    /// Runs the EventLoop forever.
+    func runLoop(timeout: EventLoopTimeout?)
 }
 
 extension EventLoop {
@@ -56,13 +63,15 @@ extension EventLoop {
     public var eventLoop: EventLoop {
         return self
     }
-    /// Calls `.run` indefinitely and sets this event
-    /// loop on the current thread.
-    public func runLoop() -> Never {
-        Thread.current.threadDictionary["eventLoop"] = self
-        Thread.current.name = label
-        // print("[\(label)] Booting")
-        while true { run() }
+
+    /// Calls `.run(timeout:)` with `nil` timeout.
+    public func run() {
+        self.run(timeout: nil)
+    }
+
+    /// Calls `.runLoop(timeout:)` with `nil` timeout.
+    public func runLoop() {
+        self.runLoop(timeout: nil)
     }
 }
 

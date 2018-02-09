@@ -5,7 +5,8 @@ import Darwin
 internal enum KqueueEventSourceType {
     case read
     case write
-    case timer(timeout: Int)
+    case timer(timeout: EventLoopTimeout)
+    case nextTick
 }
 
 /// Kqueue based `EventSource` implementation.
@@ -40,9 +41,13 @@ public final class KqueueEventSource: EventSource {
             event.filter = EVFILT_WRITE
         case .timer(let timeout):
             event.filter = EVFILT_TIMER
-            event.data = timeout
+            event.data = timeout.milliseconds
+        case .nextTick:
+            event.filter = EVFILT_USER
+            event.flags = EV_ONESHOT
+            event.fflags = NOTE_TRIGGER | NOTE_FFCOPY
         }
-        event.ident = UInt(descriptor)
+        event.ident = UInt(bitPattern: Int(descriptor))
 
         let pointer = UnsafeMutablePointer<KqueueEventSource?>.allocate(capacity: 1)
         event.udata = UnsafeMutableRawPointer(pointer)
@@ -76,9 +81,15 @@ public final class KqueueEventSource: EventSource {
         case .cancelled:
             fatalError("Called `.resume()` on a cancelled KqueueEventSource.")
         case .suspended:
-            event.flags = EV_ADD | EV_ENABLE
-            state = .resumed
-            update()
+            if event.flags & EV_ONESHOT > 0 {
+                event.flags = EV_ADD | EV_ENABLE | EV_ONESHOT
+                state = .resumed
+                update()
+            } else {
+                event.flags = EV_ADD | EV_ENABLE
+                state = .resumed
+                update()
+            }
         case .resumed:
             fatalError("Called `.resume()` on a resumed KqueueEventSource.")
         }
@@ -99,7 +110,12 @@ public final class KqueueEventSource: EventSource {
     /// Signals the event's callback.
     internal func signal(_ eof: Bool) {
         switch state {
-        case .resumed: callback(eof)
+        case .resumed:
+            if event.flags & EV_ONESHOT > 0 {
+                callback(true)
+            } else {
+                callback(eof)
+            }
         case .cancelled, .suspended: break
         }
     }
@@ -107,7 +123,10 @@ public final class KqueueEventSource: EventSource {
 
     /// Updates the `kevent` to the `kqueue` handle.
     private func update() {
-        let response = kevent(kq, &event, 1, nil, 0, nil)
+        var response = kevent(kq, &event, 1, nil, 0, nil)
+        if event.fflags & NOTE_TRIGGER > 0 {
+            response = kevent(kq, &event, 1, nil, 0, nil)
+        }
         if response < 0 {
             let reason = String(cString: strerror(errno))
             switch errno {
@@ -127,6 +146,7 @@ public final class KqueueEventSource: EventSource {
 let EVFILT_READ = Int16(Darwin.EVFILT_READ)
 let EVFILT_WRITE = Int16(Darwin.EVFILT_WRITE)
 let EVFILT_TIMER = Int16(Darwin.EVFILT_TIMER)
+let EVFILT_USER = Int16(Darwin.EVFILT_USER)
 
 let EV_ADD = UInt16(Darwin.EV_ADD)
 let EV_ENABLE = UInt16(Darwin.EV_ENABLE)
@@ -134,6 +154,10 @@ let EV_DISABLE = UInt16(Darwin.EV_DISABLE)
 let EV_DELETE = UInt16(Darwin.EV_DELETE)
 let EV_EOF = UInt16(Darwin.EV_EOF)
 let EV_ERROR = UInt16(Darwin.EV_ERROR)
+let EV_ONESHOT = UInt16(Darwin.EV_ONESHOT)
+
+let NOTE_TRIGGER = UInt32(bitPattern: Darwin.NOTE_TRIGGER)
+let NOTE_FFCOPY = Darwin.NOTE_FFCOPY
 
 extension kevent: CustomStringConvertible {
     public var description: String {
@@ -150,6 +174,7 @@ extension kevent: CustomStringConvertible {
         if self.flags & EV_DELETE > 0 {
             flags.append("EV_DELETE")
         }
+
         var filters: [String] = []
         if self.filter == EVFILT_READ {
             filters.append("EVFILT_READ")
@@ -157,7 +182,18 @@ extension kevent: CustomStringConvertible {
         if self.filter == EVFILT_WRITE {
             filters.append("EVFILT_WRITE")
         }
-        return "kevent(fd: \(ident) flags: \(flags.joined(separator: "|")) filters: \(filters.joined(separator: "|"))"
+        if self.filter == EVFILT_USER {
+            filters.append("EVFILT_USER")
+        }
+
+        var fflags: [String] = []
+        if self.fflags & NOTE_TRIGGER > 0 {
+            fflags.append("NOTE_TRIGGER")
+        }
+        if self.fflags & NOTE_FFCOPY > 0 {
+            fflags.append("NOTE_FFCOPY")
+        }
+        return "kevent(fd: \(ident) flags: \(flags.joined(separator: "|")) filters: \(filters.joined(separator: "|")) fflags: \(fflags.joined(separator: "|"))"
     }
 }
 

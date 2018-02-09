@@ -5,7 +5,7 @@ public typealias Signal = Future<Void>
 
 extension Future where T == Void {
     /// Pre-completed void future.
-    public static var done: Signal {
+    public static var done: Future<Void> {
         return _done
     }
 }

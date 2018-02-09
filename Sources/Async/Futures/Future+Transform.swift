@@ -9,7 +9,7 @@ extension Future {
     }
 }
 
-extension Array where Element == Signal {
+extension Array where Element == Future<Void> {
     /// Transforms a successful future to the supplied value.
     public func transform<T>(to callback: @escaping () throws -> Future<T>) -> Future<T> {
         return flatten().flatMap(to: T.self, callback)

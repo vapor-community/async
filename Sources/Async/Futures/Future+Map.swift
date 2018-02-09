@@ -64,7 +64,7 @@ extension Collection where Element: FutureType {
     }
 }
 
-extension Collection where Element == Signal {
+extension Collection where Element == Future<Void> {
     /// See `Future.map`
     public func map<T>(to type: T.Type, _ callback: @escaping () throws -> T) -> Future<T> {
         return flatten().map(to: T.self) { _ in

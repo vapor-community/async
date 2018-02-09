@@ -111,7 +111,7 @@ final class FutureTests : XCTestCase {
     func testAlways() {
         var always = false
         
-        Signal(error: CustomError()).always {
+        Future<Void>(error: CustomError()).always {
             always = true
         }
         
@@ -119,7 +119,7 @@ final class FutureTests : XCTestCase {
         
         always = false
         
-        Signal(()).always {
+        Future<Void>(()).always {
             always = true
         }
         
@@ -137,12 +137,12 @@ final class FutureTests : XCTestCase {
     }
     
     func testDone() throws {
-        XCTAssert(Signal.done.isCompleted)
-        XCTAssertNoThrow(try Signal.done.blockingAwait())
+        XCTAssert(Future<Void>.done.isCompleted)
+        XCTAssertNoThrow(try Future<Void>.done.blockingAwait())
         
         let signal = Promise<Void>()
         
-        let signals: [Signal] = [
+        let signals: [Future<Void>] = [
             .done,
             .done,
             .done,

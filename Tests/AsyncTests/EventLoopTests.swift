@@ -37,7 +37,7 @@ final class EventLoopTests : XCTestCase {
         source.resume()
         XCTAssertEqual(ticks, 0)
         XCTAssertEqual(done, false)
-        loop.run()
+        loop.run(timeout: .milliseconds(1))
         XCTAssertEqual(ticks, 1)
         XCTAssertEqual(done, true)
         loop.run(timeout: .milliseconds(1))
@@ -69,15 +69,37 @@ final class EventLoopTests : XCTestCase {
         XCTAssertNil(completed)
         XCTAssertNil(error)
 
-        loop.run()
+        loop.run(timeout: .milliseconds(1))
 
         XCTAssertEqual(completed, true)
         XCTAssertNil(error)
     }
 
+    func testBlockingWork() throws {
+        let loop = try DefaultEventLoop(label: "codes.vapor.async.test.timers")
+
+        let result = Promise(String.self)
+        let start = Thread.current
+
+        loop.doBlockingWork {
+            XCTAssert(Thread.current != start)
+            sleep(1)
+            return "hi"
+        }.do {
+            result.complete($0)
+        }.catch {
+            result.fail($0)
+        }.always {
+            XCTAssert(Thread.current == start)
+        }
+
+        try XCTAssertEqual(result.future.await(on: loop), "hi")
+    }
+
     static let allTests = [
         ("testTimers", testTimers),
         ("testTick", testTick),
+        ("testFutureTick", testFutureTick),
         ("testFutureTick", testFutureTick),
     ]
 }

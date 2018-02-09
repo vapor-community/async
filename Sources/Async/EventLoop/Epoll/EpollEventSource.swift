@@ -6,7 +6,7 @@ import CEpoll
 internal enum EpollEventSourceType {
     case read(descriptor: Int32)
     case write(descriptor: Int32)
-    case timer(timeout: Int)
+    case timer(timeout: EventLoopTimeout)
 }
 
 public final class EpollEventSource: EventSource {
@@ -53,18 +53,23 @@ public final class EpollEventSource: EventSource {
             }
 
             var ts = itimerspec()
-            ts.it_interval.tv_sec = 0
-            ts.it_interval.tv_nsec = 0
-            ts.it_value.tv_sec = timeout / 1000
-            ts.it_value.tv_nsec = (timeout % 1000) * 1000000
+            if timeout.nanoseconds == 0 {
+                ts.it_value.tv_nsec = 1
+            } else {
+                ts.it_value.tv_nsec = timeout.nanoseconds
+            }
 
             if timerfd_settime(tfd, 0, &ts, nil) < 0 {
-                close(tfd);
-                fatalError("timerfd_settime() failed: errno=\(errno)")
+                // close(tfd);
+                ERROR("timerfd_settime() failed: errno=\(errno)")
             }
 
             fd = tfd
-            event.events = EPOLLIN.rawValue
+            if timeout.nanoseconds == 0 {
+                event.events = EPOLLIN.rawValue | EPOLLONESHOT.rawValue
+            } else {
+                event.events = EPOLLIN.rawValue
+            }
         }
 
         let pointer = UnsafeMutablePointer<EpollEventSource?>.allocate(capacity: 1)
@@ -135,7 +140,11 @@ public final class EpollEventSource: EventSource {
     }
     
     internal func signal(_ eof: Bool) {
-        callback(eof)
+        if event.events & EPOLLONESHOT.rawValue > 0 {
+            callback(true)
+        } else {
+            callback(eof)
+        }
     }
 
     /// Updates the `epoll_event` to the efd handle.
@@ -143,7 +152,7 @@ public final class EpollEventSource: EventSource {
         let ctl = epoll_ctl(epfd, op, descriptor, &event);
         if ctl == -1 {
             let reason = String(cString: strerror(errno))
-            fatalError("An error occured during EpollEventSource.update: \(reason)")
+            ERROR("An error occured during EpollEventSource.update: \(reason)")
         }
     }
 }

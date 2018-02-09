@@ -51,14 +51,6 @@ public protocol EventLoop: Worker {
 }
 
 extension EventLoop {
-    /// Returns the current event loop.
-    public static var current: EventLoop {
-        guard let eventLoop = Thread.current.threadDictionary["eventLoop"] as? EventLoop else {
-            fatalError("Current thread is not an event loop.")
-        }
-        return eventLoop
-    }
-
     /// See Worker.eventLoop
     public var eventLoop: EventLoop {
         return self
@@ -72,6 +64,19 @@ extension EventLoop {
     /// Calls `.runLoop(timeout:)` with `nil` timeout.
     public func runLoop() {
         self.runLoop(timeout: nil)
+    }
+}
+
+extension Worker {
+    /// Performs blocking work on separate thread.
+    /// The returned Future will be completed (on the EventLoop)
+    /// when the work has finished.
+    public func doBlockingWork<T>(_ blockingWork: @escaping () -> (T)) -> Future<T> {
+        let promise = Promise(T.self)
+        Thread.async {
+            promise.complete(blockingWork(), onNextTick: self)
+        }
+        return promise.future
     }
 }
 

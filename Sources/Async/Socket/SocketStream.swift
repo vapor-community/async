@@ -16,9 +16,9 @@ public final class SocketStream<Socket>: ByteStream where Socket: Async.Socket {
     private let sink: SocketSink<Socket>
 
     /// Use the static method on `Socket` to create.
-    internal init(socket: Socket, on worker: Worker) {
+    internal init(socket: Socket, on worker: Worker, onError: @escaping SocketSink<Socket>.ErrorHandler) {
         self.source = socket.source(on: worker)
-        self.sink = socket.sink(on: worker)
+        self.sink = socket.sink(on: worker, onError: onError)
     }
 
     /// See InputStream.input
@@ -34,7 +34,15 @@ public final class SocketStream<Socket>: ByteStream where Socket: Async.Socket {
 
 extension Socket {
     /// Creates a `SocketStream` for this socket.
+    public func stream(on worker: Worker, onError: @escaping SocketSink<Self>.ErrorHandler) -> SocketStream<Self> {
+        return .init(socket: self, on: worker, onError: onError)
+    }
+    
+    /// Creates a `SocketStream` for this socket.
+    @available(*, deprecated)
     public func stream(on worker: Worker) -> SocketStream<Self> {
-        return .init(socket: self, on: worker)
+        return .init(socket: self, on: worker) { _, error in
+            fatalError("Uncaught error in SocketStream: \(error).")
+        }
     }
 }

@@ -68,8 +68,8 @@ public final class QueueStream<I, O>: Stream {
         downstream!.next(output).do {
             self.isAwaitingDownstream = false
             self.update()
-            }.catch { error in
-                self.downstream?.error(error)
+        }.catch { error in
+            self.downstream?.error(error)
         }
     }
 

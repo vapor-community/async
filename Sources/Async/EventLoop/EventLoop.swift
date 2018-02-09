@@ -36,33 +36,47 @@ public protocol EventLoop: Worker {
 
     /// Creates a new timer event source.
     /// This callback will be called perodically when the timeout is reached.
-    func onTimeout(milliseconds: Int, _ callback: @escaping EventCallback) -> EventSource
+    func onTimeout(timeout: EventLoopTimeout, _ callback: @escaping EventCallback) -> EventSource
+
+    /// Creates a new one-shot event source.
+    /// This callback will be called once on the next tick of the event loop.
+    func onNextTick(_ callback: @escaping EventCallback) -> EventSource
 
     /// Runs a single cycle for this event loop.
     /// Call `EventLoop.runLoop()` to run indefinitely.
-    func run()
+    func run(timeout: EventLoopTimeout?)
+
+    /// Runs the EventLoop forever.
+    func runLoop(timeout: EventLoopTimeout?)
 }
 
 extension EventLoop {
-    /// Returns the current event loop.
-    public static var current: EventLoop {
-        guard let eventLoop = Thread.current.threadDictionary["eventLoop"] as? EventLoop else {
-            fatalError("Current thread is not an event loop.")
-        }
-        return eventLoop
-    }
-
     /// See Worker.eventLoop
     public var eventLoop: EventLoop {
         return self
     }
-    /// Calls `.run` indefinitely and sets this event
-    /// loop on the current thread.
-    public func runLoop() -> Never {
-        Thread.current.threadDictionary["eventLoop"] = self
-        Thread.current.name = label
-        // print("[\(label)] Booting")
-        while true { run() }
+
+    /// Calls `.run(timeout:)` with `nil` timeout.
+    public func run() {
+        self.run(timeout: nil)
+    }
+
+    /// Calls `.runLoop(timeout:)` with `nil` timeout.
+    public func runLoop() {
+        self.runLoop(timeout: nil)
+    }
+}
+
+extension Worker {
+    /// Performs blocking work on separate thread.
+    /// The returned Future will be completed (on the EventLoop)
+    /// when the work has finished.
+    public func doBlockingWork<T>(_ blockingWork: @escaping () -> (T)) -> Future<T> {
+        let promise = Promise(T.self)
+        Thread.async {
+            promise.complete(blockingWork(), onNextTick: self)
+        }
+        return promise.future
     }
 }
 

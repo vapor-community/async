@@ -1,3 +1,4 @@
+@available(*, deprecated)
 public typealias Signal = Future<Void>
 
 // MARK: Void

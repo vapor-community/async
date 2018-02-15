@@ -71,6 +71,7 @@ public final class KqueueEventLoop: EventLoop {
 
     /// See EventLoop.run
     public func run(timeout: EventLoopTimeout?) {
+        DEBUG("KqueueEventLoop.run(timeout: \(timeout?.milliseconds.description ?? "nil")) [depth: \(depth)]")
         // increment run depth
         depth += 1
         let startDepth = depth
@@ -119,6 +120,7 @@ public final class KqueueEventLoop: EventLoop {
 
     /// See EventLoop.runLoop
     public func runLoop(timeout: EventLoopTimeout?) {
+        DEBUG("KqueueEventLoop.runLoop(timeout: \(timeout?.milliseconds.description ?? "nil"))")
         while true {
             self.depth = 0
             self.run(timeout: timeout)

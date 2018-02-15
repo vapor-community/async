@@ -59,10 +59,12 @@ public final class KqueueEventSource: EventSource {
         self.kq = kq
 
         pointer.initialize(to: self)
+        DEBUG("KqueueEventSource.init() [\(event)]")
     }
 
     /// See EventSource.suspend
     public func suspend() {
+        DEBUG("KqueueEventSource.suspend() [\(event)]")
         switch state {
         case .cancelled:
             fatalError("Called `.suspend()` on a cancelled KqueueEventSource.")
@@ -77,6 +79,7 @@ public final class KqueueEventSource: EventSource {
 
     /// See EventSource.resume
     public func resume() {
+        DEBUG("KqueueEventSource.resume() [\(event)]")
         switch state {
         case .cancelled:
             fatalError("Called `.resume()` on a cancelled KqueueEventSource.")
@@ -97,6 +100,7 @@ public final class KqueueEventSource: EventSource {
 
     /// See EventSource.cancel
     public func cancel() {
+        DEBUG("KqueueEventSource.cancel() [\(event)]")
         switch state {
         case .cancelled: fatalError("Called `.cancel()` on a cancelled KqueueEventSource.")
         case .resumed, .suspended:
@@ -109,6 +113,7 @@ public final class KqueueEventSource: EventSource {
 
     /// Signals the event's callback.
     internal func signal(_ eof: Bool) {
+        DEBUG("KqueueEventSource.signal(\(eof)) [\(event)]")
         switch state {
         case .resumed:
             if event.flags & EV_ONESHOT > 0 {
@@ -174,27 +179,30 @@ extension kevent: CustomStringConvertible {
         if self.flags & EV_DELETE > 0 {
             flags.append("EV_DELETE")
         }
-
-        var filters: [String] = []
         if self.filter == EVFILT_READ {
-            filters.append("EVFILT_READ")
+            flags.append("EVFILT_READ")
         }
         if self.filter == EVFILT_WRITE {
-            filters.append("EVFILT_WRITE")
+            flags.append("EVFILT_WRITE")
         }
         if self.filter == EVFILT_USER {
-            filters.append("EVFILT_USER")
+            flags.append("EVFILT_USER")
         }
-
-        var fflags: [String] = []
         if self.fflags & NOTE_TRIGGER > 0 {
-            fflags.append("NOTE_TRIGGER")
+            flags.append("NOTE_TRIGGER")
         }
         if self.fflags & NOTE_FFCOPY > 0 {
-            fflags.append("NOTE_FFCOPY")
+            flags.append("NOTE_FFCOPY")
         }
-        return "kevent(fd: \(ident) flags: \(flags.joined(separator: "|")) filters: \(filters.joined(separator: "|")) fflags: \(fflags.joined(separator: "|"))"
+        return "kevent#\(ident) \(flags.joined(separator: "|"))"
     }
 }
 
 #endif
+
+/// For printing debug info.
+func DEBUG(_ string: @autoclosure () -> String, file: StaticString = #file, line: Int = #line) {
+    #if VERBOSE
+    print("[VERBOSE] \(string()) [\(file.description.split(separator: "/").last!):\(line)]")
+    #endif
+}

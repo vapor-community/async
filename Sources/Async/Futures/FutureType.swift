@@ -180,6 +180,15 @@ public func then<T>(_ callback: @escaping () throws -> Future<T>) -> Future<T> {
 
 // MARK: Void
 
+extension Future {
+    /// Flattens any future into void
+    public func flatten() -> Future<Void> {
+        return map(to: Void.self, { (_) -> Void in
+            return Void()
+        })
+    }
+}
+
 extension Future where T == Void {
     /// Pre-completed void future.
     public static var done: Future<Void> {

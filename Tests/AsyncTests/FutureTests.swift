@@ -310,6 +310,23 @@ final class FutureTests : XCTestCase {
         XCTAssertEqual(try future1.blockingAwait(), "Hello, World! :)")
     }
 
+    func testAnd() throws {
+        let hello = Future("Hello")
+        let world = Future("World")
+        let smiley = Future(":)")
+
+        let helloWorldFuture = hello.and(world).map(to: String.self) { (helloAndWorld) in
+            "\(helloAndWorld.0) \(helloAndWorld.1)!"
+        }
+
+        let helloWorldSmileyFuture = hello.and(world, smiley).map(to: String.self) { (helloAndWorldAndSmiley) in
+            "\(helloAndWorldAndSmiley.0) \(helloAndWorldAndSmiley.1) \(helloAndWorldAndSmiley.2)!"
+        }
+
+        XCTAssertEqual(try helloWorldFuture.blockingAwait(), "Hello World!")
+        XCTAssertEqual(try helloWorldSmileyFuture.blockingAwait(), "Hello World :)!")
+    }
+
     static let allTests = [
         ("testSimpleFuture", testSimpleFuture),
         ("testFutureThen", testFutureThen),
@@ -329,6 +346,7 @@ final class FutureTests : XCTestCase {
         ("testCoalescing", testCoalescing),
         ("testFutureFlatMapErrors2", testFutureFlatMapErrors2),
         ("testPrecompleted", testPrecompleted),
+        ("testAnd", testAnd)
     ]
 }
 

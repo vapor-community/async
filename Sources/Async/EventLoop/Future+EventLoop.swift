@@ -1,11 +1,14 @@
 extension Promise {
     /// Fulfills the promise on the next tick of the supplied eventLoop.
     public func complete(_ expectation: T, onNextTick worker: Worker) {
-        let source = worker.eventLoop.onNextTick { eof in
+        var source: EventSource?
+        source = worker.eventLoop.onNextTick { eof in
             assert(eof)
             self.complete(expectation)
+            source?.cancel()
+            source = nil
         }
-        source.resume()
+        source?.resume()
     }
 
     /// Fulfills the promise on the next tick of the supplied eventLoop.

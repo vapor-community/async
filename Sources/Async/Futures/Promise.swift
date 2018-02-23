@@ -4,12 +4,32 @@
 ///
 /// [Learn More →](https://docs.vapor.codes/3.0/async/promise-future-introduction/#creating-a-promise)
 public final class Promise<T> {
+    /// Contains information about callbacks
+    /// waiting for this future to complete
+    struct Awaiter {
+        let callback: FutureResultCallback<T>
+    }
+    
     /// This promise's future.
-    public let future: Future<T>
+    public var future: Future<T> {
+        return Future<T>(referring: self)
+    }
+    
+    var result: FutureResult<T>?
+
+    /// The first awaiter, optimization for futures with one awaiter
+    var firstAwaiter: Awaiter?
+    
+    /// A list of all handlers waiting to
+    var otherAwaiters: [Awaiter]
+    
+    var isCompleted: Bool {
+        return result != nil
+    }
 
     /// Create a new promise.
     public init(_ expectation: T.Type = T.self) {
-        future = .init()
+        self.otherAwaiters = []
     }
 
     /// Fail to fulfill the promise.
@@ -18,7 +38,7 @@ public final class Promise<T> {
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/promise-future-introduction/#creating-a-promise)
     public func fail(_ error: Error) {
-        future.complete(with: .error(error))
+        complete(with: .error(error))
     }
 
     /// Fulfills the promise.
@@ -27,7 +47,25 @@ public final class Promise<T> {
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/promise-future-introduction/#creating-a-promise)
     public func complete(_ expectation: T) {
-        future.complete(with: .expectation(expectation))
+        complete(with: .expectation(expectation))
+    }
+    
+    /// Completes the result, notifying awaiters.
+    fileprivate func complete(with result: FutureResult<T>) {
+        guard self.result == nil else {
+            return
+        }
+        self.result = result
+
+        if let awaiter = firstAwaiter {
+            awaiter.callback(result)
+        }
+        for awaiter in otherAwaiters {
+            awaiter.callback(result)
+        }
+        
+        // release the awaiters to prevent retain cycles
+        otherAwaiters = []
     }
 }
 

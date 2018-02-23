@@ -21,55 +21,27 @@
 ///     print(squares) // [1, 4, 9]
 ///
 /// [Learn More →](https://docs.vapor.codes/3.0/async/streams-introduction/#transforming-streams-without-an-intermediary-stream)
-public final class MapStream<In, Out>: Stream, ClosableStream {
+public final class MapStream<In, Out>: TranscribingStream {
     /// See InputStream.Input
     public typealias Input = In
 
     /// See OutputStream.Output
     public typealias Output = Out
 
-    /// Internal stream
-    internal var _stream: BasicStream<Out>
-
-    /// Maps input to output
-    public typealias MapClosure = (In) throws -> (Out)
-
     /// The stored map closure
-    public let map: MapClosure
+    public let map: (In) throws ->  Future<Out>
 
-    /// See InputStream.onInput
-    public func onInput(_ input: In) {
-        do {
-            try _stream.onInput(map(input))
-        } catch {
-            onError(error)
-        }
-    }
-
-    /// See InputStream.onError
-    public func onError(_ error: Error) {
-        _stream.onError(error)
-    }
-
-    /// See OutputStream.onOutput
-    public func onOutput<I>(_ input: I) where I : InputStream, Out == I.Input {
-        _stream.onOutput(input)
-    }
-
-    /// See CloseableStream.onClose
-    public func onClose(_ onClose: ClosableStream) {
-        _stream.onClose(onClose)
-    }
-
-    /// See CloseableStream.close
-    public func close() {
-        _stream.close()
-    }
+    /// Internal stream
+    private var downstream: AnyInputStream<Out>?
 
     /// Create a new Map stream with the supplied closure.
-    public init(map: @escaping MapClosure) {
+    public init(map: @escaping (In) throws -> Future<Out>) {
         self.map = map
-        _stream = .init()
+    }
+
+    /// See `TranscribingStream.transcribe(_:)`
+    public func transcribe(_ input: In) throws -> Future<Out> {
+        return try map(input)
     }
 }
 
@@ -84,8 +56,31 @@ extension OutputStream {
     ///     }
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/streams-introduction/#transforming-streams-without-an-intermediary-stream)
-    public func map<T>(_ transform: @escaping ((Output) throws -> (T))) -> MapStream<Output, T> {
-        let stream = MapStream(map: transform)
-        return self.stream(to: stream)
+    public func map<T>(
+        to type: T.Type,
+        map: @escaping (Output) throws -> T
+    ) -> TranscribingStreamWrapper<MapStream<Output, T>> {
+        let map = MapStream(map: { output in
+            return try Future(map(output))
+        }).stream()
+        return stream(to: map)
+    }
+
+    /// Transforms the output of one stream (as the input of the transform) to another output
+    ///
+    /// An example of mapping ints to strings:
+    ///
+    ///     let integerStream: BasicOutputStream<Int>
+    ///     let stringSteam:   MapStream<Int, String> = integerStream.map { integer in
+    ///         return integer.description
+    ///     }
+    ///
+    /// [Learn More →](https://docs.vapor.codes/3.0/async/streams-introduction/#transforming-streams-without-an-intermediary-stream)
+    public func flatMap<T>(
+        to type: T.Type,
+        map: @escaping (Output) throws -> Future<T>
+    ) -> TranscribingStreamWrapper<MapStream<Output, T>> {
+        let map = MapStream(map: map).stream()
+        return stream(to: map)
     }
 }

@@ -94,7 +94,7 @@ final class FutureTests : XCTestCase {
         let group = DispatchGroup()
         group.enter()
 
-        intPromise.future.map { int in
+        intPromise.future.map (to: String.self){ int in
             return String(int)
         }.do { string in
             XCTAssertEqual(string, "42")
@@ -108,12 +108,71 @@ final class FutureTests : XCTestCase {
         group.wait()
     }
     
+    func testAlways() {
+        var always = false
+        
+        Future<Void>(error: CustomError()).always {
+            always = true
+        }
+        
+        XCTAssert(always)
+        
+        always = false
+        
+        Future<Void>(()).always {
+            always = true
+        }
+        
+        XCTAssert(always)
+    }
+    
+    func testFutureClosureInit() throws {
+        let future = Future("hello")
+        
+        let otherFuture = Future<String>.flatMap {
+            return future
+        }
+        
+        try XCTAssertEqual(otherFuture.blockingAwait(), "hello")
+    }
+    
+    func testDone() throws {
+        XCTAssert(Future<Void>.done.isCompleted)
+        XCTAssertNoThrow(try Future<Void>.done.blockingAwait())
+        
+        let signal = Promise<Void>()
+        
+        let signals: [Future<Void>] = [
+            .done,
+            .done,
+            .done,
+            .done,
+            signal.future
+        ]
+        
+        let groupedSignal = signals.flatten()
+        
+        XCTAssert(!groupedSignal.isCompleted)
+        
+        signal.complete()
+        
+        XCTAssert(signal.future.isCompleted)
+        XCTAssert(groupedSignal.isCompleted)
+        
+        let completed = signals.transform {
+            return Future("hello")
+        }
+        
+        XCTAssert(completed.isCompleted)
+        XCTAssertEqual(try completed.blockingAwait(), "hello")
+    }
+    
     func testFutureFlatMap() throws {
         let string = Promise<String>()
         let bool = Promise<Bool>()
         
-        let integer = string.future.flatMap { string in
-            return bool.future.map { bool in
+        let integer = string.future.flatMap(to: Int?.self) { string in
+            return bool.future.map (to: Int?.self){ bool in
                 return bool ? Int(string) : -1
             }
         }
@@ -130,8 +189,8 @@ final class FutureTests : XCTestCase {
         let string = Promise<String>()
         let bool = Promise<Bool>()
         
-        let integer = string.future.flatMap { string in
-            return bool.future.map { bool in
+        let integer = string.future.flatMap(to: Int?.self) { string in
+            return bool.future.map(to: Int?.self) { bool in
                 return bool ? Int(string) : -1
             }
         }
@@ -148,8 +207,8 @@ final class FutureTests : XCTestCase {
         let string = Promise<String>()
         let bool = Promise<Bool>()
         
-        let integer = string.future.flatMap { string in
-            return bool.future.map { bool -> Int? in
+        let integer = string.future.flatMap(to: Int?.self) { string in
+            return bool.future.map(to: Int?.self) { bool in
                 guard bool else {
                     throw CustomError()
                 }
@@ -166,7 +225,7 @@ final class FutureTests : XCTestCase {
     
     func testSimpleMap() throws {
         let future = Future<Void>(())
-        XCTAssertEqual(try future.transform(3).blockingAwait(), 3)
+        XCTAssertEqual(try future.transform(to: 3).blockingAwait(), 3)
     }
     
     func testCoalescing() throws {
@@ -181,12 +240,12 @@ final class FutureTests : XCTestCase {
         let string = Promise<String>()
         let bool = Promise<Bool>()
         
-        let integer = string.future.flatMap { string -> Future<Int?> in
+        let integer = string.future.flatMap(to: Int?.self) { string in
             guard string == "-1" else {
                 throw CustomError()
             }
             
-            return bool.future.map { bool in
+            return bool.future.map(to: Int?.self) { bool in
                 return bool ? Int(string) : -1
             }
         }
@@ -204,6 +263,52 @@ final class FutureTests : XCTestCase {
         let future2 = Future<Any>(error: CustomError())
         XCTAssertThrowsError(try future2.blockingAwait())
     }
+    
+    func testArrayFlatten() throws {
+        var promises = [Promise<Int>]()
+        let n = 100
+        
+        for _ in 0..<n {
+            promises.append(Promise<Int>())
+        }
+        
+        let futures = promises.map { $0.future }
+        
+        for i in 0..<promises.count - 1 {
+            promises[i].complete(i)
+        }
+        
+        let future = futures.flatten()
+        
+        XCTAssertFalse(future.isCompleted)
+        
+        promises.last?.complete(promises.count - 1)
+        
+        XCTAssert(future.isCompleted)
+        
+        let results = try future.blockingAwait()
+        
+        for (lhs, rhs) in results.enumerated() {
+            XCTAssertEqual(lhs, rhs)
+        }
+    }
+    
+    func testFlatMap() throws {
+        let hello = Future("Hello")
+        let world = Future("World")
+        let smiley = Future(":)")
+        
+        let future0 = flatMap(to: String.self, hello, world) { a, b in
+            return Future("\(a), \(b)!")
+        }
+        
+        let future1 = flatMap(to: String.self, hello, world, smiley) { a, b, c in
+            return Future("\(a), \(b)! \(c)")
+        }
+        
+        XCTAssertEqual(try future0.blockingAwait(), "Hello, World!")
+        XCTAssertEqual(try future1.blockingAwait(), "Hello, World! :)")
+    }
 
     static let allTests = [
         ("testSimpleFuture", testSimpleFuture),
@@ -214,6 +319,16 @@ final class FutureTests : XCTestCase {
         ("testFutureMap", testFutureMap),
         ("testFutureFlatMap", testFutureFlatMap),
         ("testFutureFlatMap2", testFutureFlatMap2),
+        ("testAlways", testAlways),
+        ("testFutureClosureInit", testFutureClosureInit),
+        ("testArrayFlatten", testArrayFlatten),
+        ("testDone", testDone),
+        ("testArrayFlatten", testArrayFlatten),
+        ("testFutureFlatMapErrors", testFutureFlatMapErrors),
+        ("testSimpleMap", testSimpleMap),
+        ("testCoalescing", testCoalescing),
+        ("testFutureFlatMapErrors2", testFutureFlatMapErrors2),
+        ("testPrecompleted", testPrecompleted),
     ]
 }
 

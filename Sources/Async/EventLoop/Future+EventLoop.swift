@@ -6,6 +6,7 @@ extension Promise {
             assert(eof)
             self.complete(expectation)
             source?.cancel()
+            source = nil
         }
         source?.resume()
     }

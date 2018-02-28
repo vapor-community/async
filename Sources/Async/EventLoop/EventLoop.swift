@@ -87,7 +87,7 @@ extension Thread {
                 work()
             }
         } else {
-            fatalError()
+            ERROR("Thead.async requires macOS 10.12 or greater")
         }
     }
 }

@@ -80,7 +80,8 @@ public final class EpollEventLoop: EventLoop {
         let t = timeout.flatMap { Int32($0.milliseconds) } ?? -1
         let eventCount = epoll_wait(epfd, eventlist.baseAddress, Int32(eventlist.count), t)
         guard eventCount >= 0 else {
-            fatalError("An error occured while running kevent: \(eventCount).")
+            ERROR("An error occured while running kevent: \(eventCount).")
+            return
         }
 
         /// print("[\(label)] \(eventCount) New Events")

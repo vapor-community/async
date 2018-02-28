@@ -49,7 +49,7 @@ public final class EpollEventSource: EventSource {
         case .timer(let timeout):
             let tfd = timerfd_create(CLOCK_MONOTONIC, Int32(TFD_NONBLOCK))
             if tfd == -1 {
-                fatalError("timerfd_create() failed: errno=\(errno)")
+                ERROR("timerfd_create() failed: errno=\(errno)")
             }
 
             var ts = itimerspec()
@@ -90,9 +90,9 @@ public final class EpollEventSource: EventSource {
     public func suspend() {
         switch state {
         case .cancelled:
-            fatalError("Called `.suspend()` on a cancelled EpollEventSource.")
+            ERROR("Called `.suspend()` on a cancelled EpollEventSource.")
         case .suspended:
-            fatalError("Called `.suspend()` on a suspended EpollEventSource.")
+            ERROR("Called `.suspend()` on a suspended EpollEventSource.")
         case .resumed:
             state = .suspended
             update(op: EPOLL_CTL_DEL)
@@ -103,12 +103,12 @@ public final class EpollEventSource: EventSource {
     public func resume() {
         switch state {
         case .cancelled:
-            fatalError("Called `.resume()` on a cancelled EpollEventSource.")
+            ERROR("Called `.resume()` on a cancelled EpollEventSource.")
         case .suspended:
             state = .resumed
             update(op: EPOLL_CTL_ADD)
         case .resumed:
-            fatalError("Called `.resume()` on a resumed EpollEventSource.")
+            ERROR("Called `.resume()` on a resumed EpollEventSource.")
         }
     }
 
@@ -120,8 +120,8 @@ public final class EpollEventSource: EventSource {
         }
 
         switch state {
-        case .cancelled: fatalError("Called `.cancel()` on a cancelled EpollEventSource.")
-        case .resumed: fatalError("Called `.cancel()` on a resumed EpollEventSource.")
+        case .cancelled: ERROR("Called `.cancel()` on a cancelled EpollEventSource.")
+        case .resumed: ERROR("Called `.cancel()` on a resumed EpollEventSource.")
         case .suspended:
             switch type {
             case .timer: close(event.data.fd)

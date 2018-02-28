@@ -67,9 +67,9 @@ public final class KqueueEventSource: EventSource {
         DEBUG("KqueueEventSource.suspend() [\(event)]")
         switch state {
         case .cancelled:
-            fatalError("Called `.suspend()` on a cancelled KqueueEventSource.")
+            ERROR("Called `.suspend()` on a cancelled KqueueEventSource.")
         case .suspended:
-            fatalError("Called `.suspend()` on a suspended KqueueEventSource.")
+            ERROR("Called `.suspend()` on a suspended KqueueEventSource.")
         case .resumed:
             event.flags = EV_ADD | EV_DISABLE
             state = .suspended
@@ -82,7 +82,7 @@ public final class KqueueEventSource: EventSource {
         DEBUG("KqueueEventSource.resume() [\(event)]")
         switch state {
         case .cancelled:
-            fatalError("Called `.resume()` on a cancelled KqueueEventSource.")
+            ERROR("Called `.resume()` on a cancelled KqueueEventSource.")
         case .suspended:
             if event.flags & EV_ONESHOT > 0 {
                 event.flags = EV_ADD | EV_ENABLE | EV_ONESHOT
@@ -94,7 +94,7 @@ public final class KqueueEventSource: EventSource {
                 update()
             }
         case .resumed:
-            fatalError("Called `.resume()` on a resumed KqueueEventSource.")
+            ERROR("Called `.resume()` on a resumed KqueueEventSource.")
         }
     }
 
@@ -102,7 +102,7 @@ public final class KqueueEventSource: EventSource {
     public func cancel() {
         DEBUG("KqueueEventSource.cancel() [\(event)]")
         switch state {
-        case .cancelled: fatalError("Called `.cancel()` on a cancelled KqueueEventSource.")
+        case .cancelled: ERROR("Called `.cancel()` on a cancelled KqueueEventSource.")
         case .resumed, .suspended:
             event.flags = EV_DELETE
             state = .cancelled
@@ -136,7 +136,7 @@ public final class KqueueEventSource: EventSource {
             let reason = String(cString: strerror(errno))
             switch errno {
             case ENOENT: break // event has already been deleted
-            default: fatalError("An error occured during KqueueEventSource.update: \(reason)")
+            default: ERROR("An error occured during KqueueEventSource.update: \(reason)")
             }
         }
     }

@@ -4,6 +4,7 @@ import Foundation
 private let maxExcessSignalCount: Int = 2
 
 /// Data stream wrapper for a dispatch socket.
+@available(*, deprecated)
 public final class SocketSource<Socket>: OutputStream
     where Socket: Async.Socket
 {
@@ -69,7 +70,8 @@ public final class SocketSource<Socket>: OutputStream
             return
         }
         guard let readSource = self.readSource else {
-            fatalError("SocketSource readSource illegally nil during close.")
+            ERROR("SocketSource readSource illegally nil during close.")
+            return
         }
         readSource.cancel()
         socket.close()
@@ -84,7 +86,8 @@ public final class SocketSource<Socket>: OutputStream
     /// as indicated by a read source.
     private func readData() {
         guard let downstream = self.downstream else {
-            fatalError("Unexpected nil downstream on SocketSource during readData.")
+            ERROR("Unexpected nil downstream on SocketSource during readData.")
+            return
         }
         do {
             let read = try socket.read(into: buffer)
@@ -141,7 +144,8 @@ public final class SocketSource<Socket>: OutputStream
             excessSignalCount = excessSignalCount &+ 1
             if excessSignalCount >= maxExcessSignalCount {
                 guard let readSource = self.readSource else {
-                    fatalError("SocketSource readSource illegally nil during signal.")
+                    ERROR("SocketSource readSource illegally nil during signal.")
+                    return
                 }
                 readSource.suspend()
                 sourceIsSuspended = true
@@ -161,7 +165,8 @@ public final class SocketSource<Socket>: OutputStream
         }
 
         guard let readSource = self.readSource else {
-            fatalError("SocketSource readSource illegally nil on resumeIfSuspended.")
+            ERROR("SocketSource readSource illegally nil on resumeIfSuspended.")
+            return
         }
         sourceIsSuspended = false
         readSource.resume()
@@ -177,6 +182,7 @@ public final class SocketSource<Socket>: OutputStream
 
 extension Socket {
     /// Creates a data stream for this socket on the supplied event loop.
+    @available(*, deprecated)
     public func source(on eventLoop: Worker, bufferSize: Int = 4096) -> SocketSource<Self> {
         return .init(socket: self, on: eventLoop, bufferSize: bufferSize)
     }

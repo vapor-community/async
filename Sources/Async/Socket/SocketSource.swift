@@ -38,11 +38,11 @@ public final class SocketSource<Socket>: OutputStream
     /// The current number of signals received while downstream was not ready
     /// since it was last ready
     private var excessSignalCount: Int
-
+    
     /// If true, the source has received EOF signal.
     /// Event source should no longer be resumed. Keep reading until there is 0 return.
     private var cancelIsPending: Bool
-
+    
     /// Creates a new `SocketSource`
     internal init(socket: Socket, on worker: Worker, bufferSize: Int) {
         self.socket = socket
@@ -94,7 +94,7 @@ public final class SocketSource<Socket>: OutputStream
                     close()
                     return
                 }
-
+                
                 let view = UnsafeBufferPointer<UInt8>(start: buffer.baseAddress, count: count)
                 downstreamIsReady = false
                 let promise = Promise(Void.self)

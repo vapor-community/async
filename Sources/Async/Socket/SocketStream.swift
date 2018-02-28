@@ -8,6 +8,7 @@ extension ByteStream {
 }
 
 /// A socket-based byte stream.
+@available(*, deprecated)
 public final class SocketStream<Socket>: ByteStream where Socket: Async.Socket {
     /// Socket source output stream.
     private let source: SocketSource<Socket>
@@ -34,6 +35,7 @@ public final class SocketStream<Socket>: ByteStream where Socket: Async.Socket {
 
 extension Socket {
     /// Creates a `SocketStream` for this socket.
+    @available(*, deprecated)
     public func stream(on worker: Worker, onError: @escaping SocketSink<Self>.ErrorHandler) -> SocketStream<Self> {
         return .init(socket: self, on: worker, onError: onError)
     }
@@ -42,7 +44,7 @@ extension Socket {
     @available(*, deprecated)
     public func stream(on worker: Worker) -> SocketStream<Self> {
         return .init(socket: self, on: worker) { _, error in
-            fatalError("Uncaught error in SocketStream: \(error).")
+            ERROR("Uncaught error in SocketStream: \(error).")
         }
     }
 }

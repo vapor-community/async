@@ -65,6 +65,7 @@ public final class Promise<T> {
         }
         
         // release the awaiters to prevent retain cycles
+        firstAwaiter = nil
         otherAwaiters = []
     }
 }

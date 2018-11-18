@@ -1,23 +1,26 @@
 /// A closure that returns a future.
 public typealias LazyFuture<T> = () -> (Future<T>)
 
-/// FIXME: some way to make this generic?
-extension Collection where Element == LazyFuture<Void> {
+extension Collection {
     /// Flattens an array of lazy futures into a future with an array of results.
     /// note: each subsequent future will wait for the previous to
     /// complete before starting.
     ///
     /// [Learn More →](https://docs.vapor.codes/3.0/async/advanced-futures/#combining-multiple-futures)
-    public func syncFlatten() -> Future<Void> {
-        let promise = Promise<Void>()
+    public func syncFlatten<T>() -> Future<[T]> where Element == LazyFuture<T> {
+        let promise = Promise<[T]>()
+        
+        var elements: [T] = []
+        elements.reserveCapacity(self.count)
         
         var iterator = makeIterator()
-        func handle(_ future: LazyFuture<Void>) {
+        func handle(_ future: LazyFuture<T>) {
             future().do { res in
+                elements.append(res)
                 if let next = iterator.next() {
                     handle(next)
                 } else {
-                    promise.complete()
+                    promise.complete(elements)
                 }
             }.catch { error in
                 promise.fail(error)
@@ -27,10 +30,22 @@ extension Collection where Element == LazyFuture<Void> {
         if let first = iterator.next() {
             handle(first)
         } else {
-            promise.complete()
+            promise.complete(elements)
         }
         
         return promise.future
+    }
+}
+
+extension Collection where Element == LazyFuture<Void> {
+    /// Flattens an array of lazy void futures into a single void future.
+    /// note: each subsequent future will wait for the previous to
+    /// complete before starting.
+    ///
+    /// [Learn More →](https://docs.vapor.codes/3.0/async/advanced-futures/#combining-multiple-futures)
+    public func syncFlatten() -> Future<Void> {
+        let flatten: Future<[Void]> = self.syncFlatten()
+        return flatten.transform(to: ())
     }
 }
 

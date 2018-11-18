@@ -293,6 +293,43 @@ final class FutureTests : XCTestCase {
         }
     }
     
+    func testArraySyncFlatten() throws {
+        var lazyFutures = [LazyFuture<Int>]()
+        let n = 10
+        
+        var completedOrder = [Int]()
+        let completionQueue = DispatchQueue(label: "testArraySyncFlattenQueue")
+        
+        for i in 0..<n {
+            lazyFutures.append({
+                let promise = Promise<Int>()
+                // delay promises so that each promise completes faster than the one before it
+                let delay = TimeInterval(Double((n - i)) / 100)
+                completionQueue.asyncAfter(deadline: .now() + delay) {
+                    promise.complete(i)
+                    completedOrder.append(i)
+                }
+                return promise.future
+            })
+        }
+        
+        let future = lazyFutures.syncFlatten()
+        
+        XCTAssertFalse(future.isCompleted)
+        
+        let results = try future.blockingAwait()
+        
+        XCTAssertTrue(future.isCompleted)
+        
+        XCTAssertTrue(results.count == n)
+        
+        for (lhs, rhs) in results.enumerated() {
+            XCTAssertEqual(lhs, rhs)
+        }
+        
+        XCTAssertEqual(completedOrder, results)
+    }
+    
     func testFlatMap() throws {
         let hello = Future("Hello")
         let world = Future("World")
